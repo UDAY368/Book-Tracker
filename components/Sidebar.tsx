@@ -13,7 +13,9 @@ import {
   ChevronRight,
   Settings,
   HelpCircle,
-  Edit
+  Edit,
+  FileText,
+  UserPlus
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -36,8 +38,11 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const links = [
     { to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, roles: [UserRole.SUPER_ADMIN, UserRole.BOOK_DISTRIBUTOR, UserRole.INCHARGE, UserRole.BOOK_RECEIVER, UserRole.VOLUNTEER] },
-    { to: '/book-update', label: 'Quick Update', icon: <Edit size={20} />, roles: [UserRole.BOOK_RECEIVER] },
-    // Removed UserRole.INCHARGE from Distribution roles
+    // Renamed 'Quick Update' to 'Book Submit'
+    { to: '/book-update', label: 'Book Submit', icon: <Edit size={20} />, roles: [UserRole.BOOK_RECEIVER] },
+    // Added 'Donor Submit'
+    { to: '/donor-submit', label: 'Donor Submit', icon: <UserPlus size={20} />, roles: [UserRole.BOOK_RECEIVER] },
+    { to: '/book-register', label: 'Book Register', icon: <FileText size={20} />, roles: [UserRole.INCHARGE] },
     { to: '/distribution', label: 'Distribution', icon: <BookOpen size={20} />, roles: [UserRole.SUPER_ADMIN, UserRole.BOOK_DISTRIBUTOR, UserRole.STAFF] },
     { to: '/collection', label: 'Collection', icon: <UploadCloud size={20} />, roles: [UserRole.STAFF] },
     { to: '/users', label: 'User Mgmt', icon: <Users size={20} />, roles: [UserRole.SUPER_ADMIN] },

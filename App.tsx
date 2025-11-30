@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import Distribution from './pages/Distribution';
 import BookUpdate from './pages/BookUpdate';
 import BookRegister from './pages/BookRegister';
+import DonorSubmit from './pages/DonorSubmit';
 import Leaderboard from './components/Leaderboard';
 import { User } from './types';
 import { api } from './services/api';
@@ -16,13 +17,6 @@ const Collection = () => (
   <div className="p-6 bg-white rounded-lg shadow-sm border border-slate-200">
     <h2 className="text-2xl font-bold mb-4">Book Collection & Return</h2>
     <p className="text-slate-600">Module for Receiver and Incharges to mark books as returned and log collected amounts.</p>
-  </div>
-);
-
-const DonorSubmit = () => (
-  <div className="p-6 bg-white rounded-lg shadow-sm border border-slate-200">
-    <h2 className="text-2xl font-bold mb-4">Donor Submission</h2>
-    <p className="text-slate-600">Submit donor details and payment information here.</p>
   </div>
 );
 

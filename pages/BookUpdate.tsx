@@ -135,7 +135,7 @@ const BookUpdate: React.FC = () => {
       
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Quick Book Update</h2>
+          <h2 className="text-2xl font-bold text-slate-800">Book Submission</h2>
           <p className="text-slate-500 text-sm">Search and update book totals instantly.</p>
         </div>
       </div>

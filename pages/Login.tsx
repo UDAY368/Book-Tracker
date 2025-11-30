@@ -24,7 +24,7 @@ const DEMO_ACCOUNTS = [
   { role: UserRole.SUPER_ADMIN, email: 'admin@pssm.org', label: 'Super Admin', icon: <Shield size={14} /> },
   { role: UserRole.BOOK_DISTRIBUTOR, email: 'distributor@pssm.org', label: 'Distributor', icon: <Truck size={14} /> },
   { role: UserRole.INCHARGE, email: 'incharge@pssm.org', label: 'Incharge', icon: <BookOpen size={14} /> },
-  { role: UserRole.BOOK_RECEIVER, email: 'receiver@pssm.org', label: 'Receiver', icon: <Users size={14} /> },
+  { role: UserRole.BOOK_RECEIVER, email: 'receiver@pssm.org', label: 'Co Ordinator', icon: <Users size={14} /> },
 ];
 
 const Login: React.FC<LoginProps> = ({ onLogin, onGoToSignup }) => {

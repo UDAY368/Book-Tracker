@@ -14,7 +14,7 @@ const generateMockAssignments = () => {
     {
       id: 1,
       date: '2023-10-28',
-      distributorName: 'Suresh Rao',
+      inchargeName: 'Suresh Rao', // Renamed from distributorName
       phone: '+91 98765 43210',
       totalBooks: 50,
       batchName: 'HYD-NOV-23',
@@ -40,7 +40,7 @@ const generateMockAssignments = () => {
     {
       id: 2,
       date: '2023-10-25',
-      distributorName: 'Ramesh Gupta',
+      inchargeName: 'Ramesh Gupta', // Renamed from distributorName
       phone: '+91 98765 11111',
       totalBooks: 30,
       batchName: 'BLR-OCT-23',
@@ -98,9 +98,9 @@ const BookRegister: React.FC = () => {
   // Bulk Upload States
   const [bulkFormData, setBulkFormData] = useState({
     date: new Date().toISOString().split('T')[0],
-    distributorName: '',
-    distributorPhone: '',
-    batchName: '', // Added Batch Name
+    inchargeName: '', // Renamed from distributorName
+    inchargePhone: '', // Renamed from distributorPhone
+    batchName: '',
     totalBooks: '',
     registeredBooks: '',
     pendingBooks: ''
@@ -293,8 +293,8 @@ const BookRegister: React.FC = () => {
   };
 
   const handleBulkProcess = () => {
-     if (!bulkFormData.distributorName) {
-       alert("Please enter Distributor Name");
+     if (!bulkFormData.inchargeName) {
+       alert("Please enter Incharge Name");
        return;
      }
 
@@ -302,8 +302,8 @@ const BookRegister: React.FC = () => {
      const newAssignment = {
         id: Date.now(),
         date: bulkFormData.date,
-        distributorName: bulkFormData.distributorName,
-        phone: bulkFormData.distributorPhone,
+        inchargeName: bulkFormData.inchargeName, // Updated field
+        phone: bulkFormData.inchargePhone, // Updated field
         totalBooks: parseInt(bulkFormData.totalBooks) || 0,
         batchName: bulkFormData.batchName || ('BULK-IMPORT-' + new Date().getMonth()), // Use input or fallback
         books: parsedBulkData.map(item => ({
@@ -333,8 +333,8 @@ const BookRegister: React.FC = () => {
      setParsedBulkData([]);
      setBulkFormData({ 
         date: new Date().toISOString().split('T')[0], 
-        distributorName: '', 
-        distributorPhone: '', 
+        inchargeName: '', // Reset Updated field
+        inchargePhone: '', // Reset Updated field
         batchName: '',
         totalBooks: '', 
         registeredBooks: '', 
@@ -408,7 +408,7 @@ const BookRegister: React.FC = () => {
                        <thead className="bg-slate-50">
                           <tr>
                              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date</th>
-                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Distributor Name</th>
+                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Incharge Name</th>
                              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Phone Number</th>
                              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Total Books</th>
                              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Registered Books</th>
@@ -429,7 +429,7 @@ const BookRegister: React.FC = () => {
                                          {new Date(assign.date).toLocaleDateString()}
                                       </td>
                                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
-                                         {assign.distributorName}
+                                         {assign.inchargeName}
                                       </td>
                                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-mono">
                                          {assign.phone}
@@ -527,12 +527,12 @@ const BookRegister: React.FC = () => {
                           />
                        </div>
                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">Distributor Name</label>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Incharge Name</label>
                           <input 
                              type="text" 
                              placeholder="Enter Name"
-                             value={bulkFormData.distributorName} 
-                             onChange={e => setBulkFormData({...bulkFormData, distributorName: e.target.value})}
+                             value={bulkFormData.inchargeName} 
+                             onChange={e => setBulkFormData({...bulkFormData, inchargeName: e.target.value})}
                              className="block w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
                           />
                        </div>
@@ -541,8 +541,8 @@ const BookRegister: React.FC = () => {
                           <input 
                              type="tel" 
                              placeholder="Enter Phone"
-                             value={bulkFormData.distributorPhone} 
-                             onChange={e => setBulkFormData({...bulkFormData, distributorPhone: e.target.value})}
+                             value={bulkFormData.inchargePhone} 
+                             onChange={e => setBulkFormData({...bulkFormData, inchargePhone: e.target.value})}
                              className="block w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
                           />
                        </div>
@@ -644,7 +644,7 @@ const BookRegister: React.FC = () => {
                         <thead className="bg-slate-50">
                            <tr>
                               <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date</th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Distributor Name</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Incharge Name</th>
                               <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Phone Number</th>
                               <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Total Books</th>
                               <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Registered Books</th>
@@ -666,7 +666,7 @@ const BookRegister: React.FC = () => {
                                           {new Date(assign.date).toLocaleDateString()}
                                        </td>
                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
-                                          {assign.distributorName}
+                                          {assign.inchargeName}
                                        </td>
                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-mono">
                                           {assign.phone}

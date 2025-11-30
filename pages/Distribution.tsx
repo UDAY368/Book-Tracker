@@ -4,8 +4,31 @@ import { api } from '../services/api';
 import { 
   Plus, FileText, Search, User, X, Upload, Loader2, CheckCircle, 
   Printer, Package, ChevronRight, ChevronDown, ChevronUp, FileCheck, Calendar, MapPin, Edit,
-  ClipboardList, CheckSquare, Book, Trash2, Download, AlertTriangle, FileSpreadsheet, RefreshCw,Tag
+  ClipboardList, CheckSquare, Book, Trash2, Download, AlertTriangle, FileSpreadsheet, RefreshCw,
+  Tag, Truck, Clock, List, Phone
 } from 'lucide-react';
+
+// --- Mock Location Data ---
+const LOCATION_DATA: Record<string, Record<string, string[]>> = {
+  "Andhra Pradesh": {
+    "Visakhapatnam": ["MVP Colony", "Gajuwaka", "Bheemunipatnam", "Pendurthi"],
+    "Vijayawada (NTR District)": ["Vijayawada North", "Vijayawada Central", "Vijayawada South", "Gollapudi"],
+    "Guntur": ["Guntur East", "Guntur West", "Mangalagiri", "Tenali"],
+    "Tirupati": ["Tirupati Urban", "Tirupati Rural", "Renigunta", "Srikalahasti"]
+  },
+  "Telangana": {
+    "Hyderabad": ["Kukatpally", "Hitech City", "Secunderabad", "Charminar"],
+    "Ranga Reddy": ["Gachibowli", "Shamshabad", "LB Nagar", "Ibrahimpatnam"],
+    "Warangal": ["Warangal Urban", "Hanamkonda", "Kazipet", "Narsampet"],
+    "Nizamabad": ["Nizamabad Rural", "Bodhan", "Armoor", "Dichpally"]
+  },
+  "Karnataka": {
+    "Bengaluru Urban": ["Whitefield", "Indiranagar", "Koramangala", "Jayanagar"],
+    "Mysuru": ["Mysuru North", "Mysuru South", "Nanjangud", "T. Narasipura"],
+    "Mangaluru (Dakshina Kannada)": ["Mangaluru City", "Ullal", "Moodbidri", "Bantwal"],
+    "Hubballi-Dharwad": ["Hubballi", "Dharwad", "Navanagar", "Kalghatgi"]
+  }
+};
 
 interface DistributionProps {
   role: UserRole;
@@ -45,7 +68,12 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
 
   // Expanded Row State for Accordion
   const [expandedRowId, setExpandedRowId] = useState<number | null>(null);
+  // Filter state for the expanded detailed view
+  const [detailFilter, setDetailFilter] = useState<'All' | 'Distributed' | 'Registered' | 'Submitted'>('All');
   
+  // Right Sidebar State for Book Details
+  const [selectedBookDetail, setSelectedBookDetail] = useState<any | null>(null);
+
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -59,6 +87,12 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
   // Selected Batch Availability State for Form
   const [selectedBatchAvailable, setSelectedBatchAvailable] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // --- NEW STATES FOR REQUIREMENTS ---
+  const [location, setLocation] = useState({ state: '', district: '', town: '' });
+  const [bookChips, setBookChips] = useState<string[]>([]);
+  const [tempSerial, setTempSerial] = useState({ start: '', end: '', single: '' });
+
 
   // Load Data on Mount
   useEffect(() => {
@@ -88,11 +122,9 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
     recipientName: '',
     phone: '',
     pssmId: '',
-    address: '',
+    // Address is now constructed from location state on submit
     batchNumber: '',
-    startSerial: '',
-    endSerial: '',
-    numberOfBooks: ''
+    // startSerial and endSerial are used for range generation
   });
 
   const [batchFormData, setBatchFormData] = useState({
@@ -105,6 +137,68 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
   });
   
   const [editingBatchId, setEditingBatchId] = useState<number | string | null>(null);
+
+  // --- Helper Component: Searchable Select ---
+  const SearchableSelect = ({ 
+    label, 
+    value, 
+    options, 
+    onChange, 
+    placeholder,
+    disabled = false
+  }: { label: string, value: string, options: string[], onChange: (val: string) => void, placeholder: string, disabled?: boolean }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [filter, setFilter] = useState('');
+    
+    useEffect(() => {
+        if (!isOpen) setFilter('');
+    }, [isOpen]);
+
+    const filteredOptions = options.filter(opt => opt.toLowerCase().includes(filter.toLowerCase()));
+
+    return (
+      <div className="relative">
+        <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
+        <div className="relative">
+            <input
+                type="text"
+                value={value}
+                onClick={() => !disabled && setIsOpen(!isOpen)}
+                onChange={(e) => {
+                    onChange(e.target.value);
+                    setFilter(e.target.value);
+                    setIsOpen(true);
+                }}
+                disabled={disabled}
+                className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm"
+                placeholder={placeholder}
+                onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+            />
+            {!disabled && (
+                <ChevronDown className="absolute right-3 top-2.5 text-slate-400 pointer-events-none" size={16} />
+            )}
+        </div>
+        {isOpen && filteredOptions.length > 0 && (
+            <ul className="absolute z-50 mt-1 w-full bg-white shadow-lg max-h-48 rounded-md py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none custom-scrollbar">
+                {filteredOptions.map((opt) => (
+                    <li 
+                        key={opt}
+                        className="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-indigo-50 text-slate-900"
+                        onMouseDown={(e) => {
+                            e.preventDefault(); // Prevent blur
+                            onChange(opt);
+                            setIsOpen(false);
+                        }}
+                    >
+                        {opt}
+                    </li>
+                ))}
+            </ul>
+        )}
+      </div>
+    );
+  };
+
 
   // --- Search Logic ---
   const filteredDistributedList = distributedList.filter(item => 
@@ -121,26 +215,73 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
   // --- Handlers ---
 
   const handleToggleExpand = (id: number) => {
-    setExpandedRowId(expandedRowId === id ? null : id);
+    if (expandedRowId === id) {
+      setExpandedRowId(null);
+    } else {
+      setExpandedRowId(id);
+      setDetailFilter('All'); // Reset filter
+    }
+  };
+
+  const handleBookGridClick = (e: React.MouseEvent, bookNum: string, status: string, parentItem: any) => {
+    e.stopPropagation();
+    setSelectedBookDetail({
+        bookNumber: bookNum,
+        status: status,
+        recipientName: parentItem.name,
+        phone: parentItem.phone,
+        date: parentItem.date,
+        regDate: status !== 'Distributed' ? '2023-10-25' : 'N/A',
+        pssmId: parentItem.pssmId || 'PSSM-1234',
+        address: parentItem.address || 'Hyderabad, Telangana'
+    });
+  };
+
+  // Helper to generate book list for the grid based on range
+  const generateBookGrid = (item: any) => {
+    // If item has stored detailed list (from new edit logic), use that, else mock it
+    if (item.bookChips && item.bookChips.length > 0) {
+        return item.bookChips.map((num: string) => ({ number: num, status: 'Distributed' })); // Default status for now
+    }
+
+    if (!item.range || !item.range.includes('-')) return [];
+    
+    const [start, end] = item.range.split('-').map((s: string) => s.trim());
+    const prefixMatch = start.match(/^([A-Z]+)/);
+    const prefix = prefixMatch ? prefixMatch[0] : '';
+    const startNumMatch = start.match(/(\d+)$/);
+    const startNum = startNumMatch ? parseInt(startNumMatch[0]) : 0;
+    
+    const books = [];
+    for (let i = 0; i < item.count; i++) {
+        const currentNum = startNum + i;
+        const bookNum = `${prefix}${String(currentNum).padStart(start.length - prefix.length, '0')}`;
+        
+        let status = 'Distributed';
+        if (i < (item.submittedCount || 0)) {
+            status = 'Submitted';
+        } else if (i < (item.registeredCount || 0)) {
+            status = 'Registered';
+        }
+        
+        books.push({ number: bookNum, status });
+    }
+    return books;
   };
 
   // Helper to calculate available books
   const getAvailableBooks = (batch: any) => {
-    // Use the new field if present, otherwise fallback
     if (batch.remainingBooks !== undefined) return batch.remainingBooks;
-    
-    // Fallback logic for legacy data
     if (batch.status === 'Fully Distributed') return 0;
     if (batch.status === 'In Stock') return batch.totalBooks;
-    return Math.floor(batch.totalBooks * 0.6); // Mock fallback
+    return Math.floor(batch.totalBooks * 0.6);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    setFormError(null); // Clear error on change
+    setFormError(null); 
 
-    // Logic to update available count when batch changes
     if (name === 'batchNumber') {
       const selectedBatch = batchesList.find(b => b.batchName === value);
       if (selectedBatch) {
@@ -152,12 +293,48 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
     }
   };
 
+  // --- Book Assignment Handlers ---
+  const handleAddBookRange = () => {
+    if (!tempSerial.start || !tempSerial.end) return;
+    
+    // Simple alpha-numeric generator
+    const prefixMatch = tempSerial.start.match(/^([A-Z]+)/);
+    const prefix = prefixMatch ? prefixMatch[0] : '';
+    const startNum = parseInt(tempSerial.start.replace(/^\D+/g, ''));
+    const endNum = parseInt(tempSerial.end.replace(/^\D+/g, ''));
+
+    if (isNaN(startNum) || isNaN(endNum) || endNum < startNum) {
+        alert("Invalid serial range");
+        return;
+    }
+
+    const newBooks = [];
+    for (let i = startNum; i <= endNum; i++) {
+        // Match padding length of input if possible, else simple string
+        newBooks.push(`${prefix}${i}`);
+    }
+
+    setBookChips(prev => [...new Set([...prev, ...newBooks])]); // Avoid duplicates
+    setTempSerial({ ...tempSerial, start: '', end: '' });
+  };
+
+  const handleAddSingleBook = () => {
+    if (!tempSerial.single) return;
+    setBookChips(prev => [...new Set([...prev, tempSerial.single])]);
+    setTempSerial({ ...tempSerial, single: '' });
+  };
+
+  const handleRemoveBook = (bookToRemove: string) => {
+    setBookChips(prev => prev.filter(b => b !== bookToRemove));
+  };
+
+
   const handleBatchInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setBatchFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // --- IMPORT LOGIC --- (Keep as is)
+  // --- EXPORT & IMPORT LOGIC ---
   const getSampleData = () => {
     if (activeTab === 'distribution') {
       return {
@@ -200,11 +377,17 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
     reader.onload = (event) => {
       setTimeout(() => { 
         try {
-          const text = event.target?.result as string;
-          const lines = text.split('\n').map(line => line.trim()).filter(line => line);
-          if (lines.length < 2) throw new Error("File is empty or missing data rows.");
+          let text = event.target?.result as string;
+          text = text.replace(/^\uFEFF/, '');
+          const lines = text.split(/\r\n|\n|\r/).map(line => line.trim()).filter(line => line);
+          
+          if (lines.length < 2) {
+            throw new Error("File is empty or missing data rows.");
+          }
+
           const fileHeaders = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
           const { headers: expectedHeaders } = getSampleData();
+
           const missingHeaders = expectedHeaders.filter(h => !fileHeaders.includes(h));
           
           if (missingHeaders.length > 0) {
@@ -214,8 +397,9 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
           }
 
           const results: ImportRowResult[] = lines.slice(1).map((line, index) => {
-             const cols = line.split(',').map(c => c.trim());
+             const cols = line.split(',').map(c => c.trim().replace(/"/g, '')); 
              let dataObject: any = {};
+
              if (activeTab === 'distribution') {
                 dataObject = { date: cols[0], name: cols[1], phone: cols[2], type: cols[3], start: cols[4], end: cols[5], count: cols[6] };
                 if (!dataObject.name || !dataObject.phone) return { id: index + 1, data: dataObject, status: 'error', message: 'Name or Phone missing' };
@@ -240,6 +424,7 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
   const finalizeImport = async () => {
     const validRows = importReport.filter(r => r.status === 'valid');
     if (validRows.length === 0) return;
+    
     if (activeTab === 'distribution') {
        const newItems = validRows.map((row, idx) => ({
           id: Date.now() + idx,
@@ -264,7 +449,7 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
           startSerial: row.data.start,
           endSerial: row.data.end,
           totalBooks: parseInt(row.data.total),
-          remainingBooks: parseInt(row.data.total), // Initial import assumes full stock
+          remainingBooks: parseInt(row.data.total), 
           status: row.data.status || 'In Stock'
        }));
        await api.saveBatchesBulk(newBatches);
@@ -294,7 +479,11 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
     let dataToExport: any[] = [];
 
     if (isDistributionTab) {
-      headers = ['Date', 'Recipient Name', 'Phone', 'Type', 'Serial Range', 'Total Books', 'Status', 'Registered Count', 'Registered Series', 'Submitted Count', 'Submitted Series'];
+      if (filteredDistributedList.length === 0) {
+        alert("No distribution records to export.");
+        return;
+      }
+      headers = ['Date', 'Recipient Name', 'Phone', 'Type', 'Serial Range', 'Total Books', 'Batch Name', 'Status', 'Registered Count', 'Submitted Count'];
       dataToExport = filteredDistributedList.map(item => ({
         Date: item.date,
         'Recipient Name': item.name,
@@ -302,13 +491,16 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
         Type: item.type,
         'Serial Range': item.range,
         'Total Books': item.count,
+        'Batch Name': item.batchName || '',
         Status: item.status,
-        'Registered Count': item.registeredCount,
-        'Registered Series': item.registeredSeries ? item.registeredSeries.join('; ') : '',
-        'Submitted Count': item.submittedCount,
-        'Submitted Series': item.submittedSeries ? item.submittedSeries.join('; ') : ''
+        'Registered Count': item.registeredCount || 0,
+        'Submitted Count': item.submittedCount || 0
       }));
     } else {
+      if (filteredBatchesList.length === 0) {
+        alert("No print batches to export.");
+        return;
+      }
       headers = ['Batch Name', 'Printed Date', 'Start Serial', 'End Serial', 'Total Books', 'Available Books', 'Status'];
       dataToExport = filteredBatchesList.map(item => ({
         'Batch Name': item.batchName,
@@ -316,7 +508,7 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
         'Start Serial': item.startSerial,
         'End Serial': item.endSerial,
         'Total Books': item.totalBooks,
-        'Available Books': item.remainingBooks !== undefined ? item.remainingBooks : item.totalBooks,
+        'Available Books': getAvailableBooks(item),
         Status: item.status
       }));
     }
@@ -325,7 +517,7 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
     csvRows.push(headers.join(','));
     for (const row of dataToExport) {
       const values = headers.map(header => {
-        const val = row[header] !== undefined ? row[header] : '';
+        const val = row[header] !== undefined && row[header] !== null ? row[header] : '';
         const escaped = ('' + val).replace(/"/g, '""');
         return `"${escaped}"`;
       });
@@ -352,12 +544,15 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
       recipientName: '',
       phone: '',
       pssmId: '',
-      address: '',
+      address: '', // Legacy field logic
       batchNumber: '',
       startSerial: '',
       endSerial: '',
       numberOfBooks: ''
     });
+    setLocation({ state: '', district: '', town: '' });
+    setBookChips([]);
+    setTempSerial({ start: '', end: '', single: '' });
     setFormError(null);
     setSelectedBatchAvailable(null);
     setFormOpen(true);
@@ -366,7 +561,24 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
   const openEditDistributionModal = (e: React.MouseEvent, item: any) => {
     e.stopPropagation();
     setEditingDistributionId(item.id);
-    const [start, end] = item.range.includes(' - ') ? item.range.split(' - ') : [item.range, ''];
+    
+    // Try to parse address into location state
+    const addrParts = (item.address || '').split(',').map((s: string) => s.trim());
+    // Assuming format: Town, District, State
+    const town = addrParts[0] || '';
+    const district = addrParts[1] || '';
+    const state = addrParts[2] || '';
+
+    setLocation({ state, district, town });
+    setBookChips(item.bookChips || []); 
+    
+    // If no chips but range exists, populate chips from range for editing
+    if ((!item.bookChips || item.bookChips.length === 0) && item.range) {
+         // Simple mock regeneration
+         const generated = generateBookGrid(item).map((b: any) => b.number);
+         setBookChips(generated);
+    }
+
     setFormData({
       date: item.date,
       recipientType: item.type,
@@ -374,87 +586,63 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
       phone: item.phone,
       pssmId: item.pssmId || '', 
       address: item.address || '',
-      batchNumber: '', // Ideally retrieved from saved data
-      startSerial: start,
-      endSerial: end,
+      batchNumber: item.batchName || '',
+      startSerial: '',
+      endSerial: '',
       numberOfBooks: item.count.toString()
     });
     setFormError(null);
-    setSelectedBatchAvailable(null);
+    if (item.batchName) {
+       const batch = batchesList.find(b => b.batchName === item.batchName);
+       if (batch) setSelectedBatchAvailable(getAvailableBooks(batch));
+    }
     setFormOpen(true);
   };
 
+  // ... [Keep Batch Modal Functions] ...
   const openCreateBatchModal = () => {
     setEditingBatchId(null);
-    setBatchFormData({
-      batchName: '',
-      printedDate: new Date().toISOString().split('T')[0],
-      totalBooks: '',
-      startSerial: '',
-      endSerial: '',
-      status: 'In Stock'
-    });
+    setBatchFormData({ batchName: '', printedDate: new Date().toISOString().split('T')[0], totalBooks: '', startSerial: '', endSerial: '', status: 'In Stock' });
     setBatchModalOpen(true);
   };
-
   const openEditBatchModal = (e: React.MouseEvent, batch: any) => {
     e.stopPropagation();
     setEditingBatchId(batch.id);
-    setBatchFormData({
-      batchName: batch.batchName,
-      printedDate: batch.printedDate,
-      totalBooks: batch.totalBooks.toString(),
-      startSerial: batch.startSerial,
-      endSerial: batch.endSerial,
-      status: batch.status
-    });
+    setBatchFormData({ batchName: batch.batchName, printedDate: batch.printedDate, totalBooks: batch.totalBooks.toString(), startSerial: batch.startSerial, endSerial: batch.endSerial, status: batch.status });
     setBatchModalOpen(true);
   };
-
   const handleBatchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const batchPayload: any = {
-        id: editingBatchId,
-        batchName: batchFormData.batchName,
-        printedDate: batchFormData.printedDate,
-        totalBooks: parseInt(batchFormData.totalBooks),
-        startSerial: batchFormData.startSerial,
-        endSerial: batchFormData.endSerial,
-        bookSerialStart: batchFormData.startSerial,
-        bookSerialEnd: batchFormData.endSerial,
-        status: batchFormData.status
-    };
-    
-    // If creating new, init remaining books to total
-    if (!editingBatchId) {
-        batchPayload.remainingBooks = batchPayload.totalBooks;
-    }
-
-    await api.saveBatch(batchPayload);
-    await loadData(); // Refresh
-    
-    setToastMessage(editingBatchId ? "Batch Updated Successfully!" : "Print Batch Created Successfully!");
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 3000);
-    
+    const payload: any = { ...batchFormData, id: editingBatchId, totalBooks: parseInt(String(batchFormData.totalBooks)) };
+    if (!editingBatchId) payload.remainingBooks = payload.totalBooks;
+    await api.saveBatch(payload);
+    await loadData();
     setBatchModalOpen(false);
+    setToastMessage("Batch Saved!"); setShowToast(true); setTimeout(()=>setShowToast(false), 3000);
+  };
+  const handleDeleteBatch = async (e: React.MouseEvent, id: any) => {
+      e.stopPropagation();
+      if(confirm("Delete?")) { await api.deleteBatch(id); loadData(); }
   };
 
   const handleDistribute = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
     
-    const countToDistribute = parseInt(formData.numberOfBooks) || 0;
+    const countToDistribute = bookChips.length;
 
-    // VALIDATION: Check availability
+    if (countToDistribute === 0) {
+        setFormError("Please assign at least one book.");
+        return;
+    }
+
+    // VALIDATION
     if (!editingDistributionId && formData.batchNumber) {
         if (selectedBatchAvailable !== null) {
-             // Check if out of stock completely
              if (selectedBatchAvailable === 0) {
                  setFormError("The selected batch is Out of Books.");
                  return;
              }
-             // Check if insufficient stock
              if (countToDistribute > selectedBatchAvailable) {
                 setFormError(`The batch is Out of Books (Available: ${selectedBatchAvailable})`);
                 return;
@@ -462,20 +650,30 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
         }
     }
 
+    // Construct Address
+    const finalAddress = `${location.town}, ${location.district}, ${location.state}`;
+    
+    // Calculate Range String
+    const sortedChips = [...bookChips].sort();
+    const rangeString = sortedChips.length > 0 
+        ? (sortedChips.length > 1 ? `${sortedChips[0]} - ${sortedChips[sortedChips.length-1]}` : sortedChips[0])
+        : '-';
+
     const distributionPayload = {
         id: editingDistributionId, // Null for new
         date: formData.date,
         name: formData.recipientName,
         phone: formData.phone,
         type: formData.recipientType,
-        range: `${formData.startSerial} - ${formData.endSerial}`,
+        range: rangeString,
         count: countToDistribute,
         status: 'Distributed',
-        batchName: formData.batchNumber, // SAVE BATCH NAME HERE
+        batchName: formData.batchNumber,
+        pssmId: formData.pssmId,
+        address: finalAddress,
+        bookChips: bookChips, // Persist chips
         registeredCount: 0,
-        registeredSeries: [],
-        submittedCount: 0,
-        submittedSeries: []
+        submittedCount: 0
     };
 
     // UPDATE BATCH INVENTORY Logic
@@ -484,30 +682,22 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
         if (batchIndex !== -1) {
             const batchToUpdate = { ...batchesList[batchIndex] };
             
-            // Deduct from remainingBooks
             let currentRemaining = batchToUpdate.remainingBooks !== undefined ? batchToUpdate.remainingBooks : batchToUpdate.totalBooks;
-            
             currentRemaining -= countToDistribute;
             if (currentRemaining < 0) currentRemaining = 0;
             
             batchToUpdate.remainingBooks = currentRemaining;
-
-            // Update Status based on remaining
-            if (currentRemaining === 0) {
-               batchToUpdate.status = 'Fully Distributed';
-            } else if (currentRemaining < batchToUpdate.totalBooks) {
-               batchToUpdate.status = 'Partially Distributed';
-            }
+            if (currentRemaining === 0) batchToUpdate.status = 'Fully Distributed';
+            else if (currentRemaining < batchToUpdate.totalBooks) batchToUpdate.status = 'Partially Distributed';
             
             await api.saveBatch(batchToUpdate);
         }
     }
 
     await api.saveDistribution(distributionPayload);
-    await loadData(); // Refresh data to show updated batch counts
+    await loadData(); 
     
-    // SHOW TOAST instead of alert
-    setToastMessage(editingDistributionId ? "Distribution Record Updated Successfully!" : "Distribution added Successfully");
+    setToastMessage(editingDistributionId ? "Distribution Updated!" : "Distribution Added!");
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3000);
     
@@ -529,118 +719,131 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
       {showToast && (
         <div className="fixed top-6 right-6 z-[100] animate-in fade-in slide-in-from-top-5 duration-500 ease-in-out">
           <div className="bg-emerald-50 text-emerald-800 px-6 py-4 rounded-xl shadow-lg shadow-emerald-500/10 flex items-center gap-3 border border-emerald-200 ring-1 ring-emerald-100">
-            <div className="bg-white p-1.5 rounded-full shadow-sm text-emerald-600">
-               <CheckCircle className="h-5 w-5" />
-            </div>
-            <div>
-              <h4 className="font-bold text-sm text-emerald-900">Success</h4>
-              <p className="text-xs text-emerald-700">{toastMessage}</p>
-            </div>
-            <button onClick={() => setShowToast(false)} className="ml-4 text-emerald-400 hover:text-emerald-600 transition-colors p-1 hover:bg-emerald-100 rounded-full">
-              <X size={16} />
-            </button>
+            <div className="bg-white p-1.5 rounded-full shadow-sm text-emerald-600"><CheckCircle className="h-5 w-5" /></div>
+            <div><h4 className="font-bold text-sm text-emerald-900">Success</h4><p className="text-xs text-emerald-700">{toastMessage}</p></div>
+            <button onClick={() => setShowToast(false)} className="ml-4 text-emerald-400 hover:text-emerald-600 transition-colors p-1 hover:bg-emerald-100 rounded-full"><X size={16} /></button>
           </div>
         </div>
       )}
 
-      {/* Header & Tabs */}
+      {/* Right Sidebar for Book Details */}
+      {selectedBookDetail && (
+         <div className="fixed inset-0 z-50 flex justify-end">
+            <div className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity" onClick={() => setSelectedBookDetail(null)}></div>
+            <div className="w-96 bg-white h-full shadow-2xl relative flex flex-col animate-in slide-in-from-right duration-300">
+               <div className="bg-slate-900 text-white p-6 flex justify-between items-start shrink-0">
+                  <div>
+                     <h3 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+                        <Book className="text-indigo-400" size={24} />
+                        {selectedBookDetail.bookNumber}
+                     </h3>
+                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-3 border ${
+                        selectedBookDetail.status === 'Submitted' ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/30' :
+                        selectedBookDetail.status === 'Registered' ? 'bg-blue-500/20 text-blue-200 border-blue-500/30' :
+                        'bg-slate-700 text-slate-300 border-slate-600'
+                     }`}>
+                        {selectedBookDetail.status}
+                     </span>
+                  </div>
+                  <button onClick={() => setSelectedBookDetail(null)} className="text-slate-400 hover:text-white transition-colors"><X size={24} /></button>
+               </div>
+               
+               <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                  
+                  {/* Recipient Info */}
+                  <div className="space-y-4">
+                     <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold">
+                           {selectedBookDetail.recipientName.charAt(0)}
+                        </div>
+                        <div>
+                           <p className="text-sm font-medium text-slate-900">{selectedBookDetail.recipientName}</p>
+                           <p className="text-xs text-slate-500">{selectedBookDetail.phone}</p>
+                        </div>
+                     </div>
+                     
+                     <div className="grid grid-cols-2 gap-4 pt-2">
+                        <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">PSSM ID</p><p className="text-sm font-mono text-slate-700">{selectedBookDetail.pssmId}</p></div>
+                        <div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Distribution Date</p><p className="text-sm text-slate-700">{formatDate(selectedBookDetail.date)}</p></div>
+                     </div>
+                     
+                     <div>
+                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2 mb-3">
+                            <MapPin size={14} className="text-indigo-500" /> Location Details
+                        </h4>
+                        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                             <div className="p-3 border-b border-slate-100 flex justify-between items-center">
+                                 <span className="text-xs text-slate-500 font-medium">Town / Mandal</span>
+                                 <span className="text-sm text-slate-900 font-semibold">
+                                     {selectedBookDetail.address.split(',')[0]?.trim() || '-'}
+                                 </span>
+                             </div>
+                             <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                                 <span className="text-xs text-slate-500 font-medium">District</span>
+                                 <span className="text-sm text-slate-900 font-semibold">
+                                     {selectedBookDetail.address.split(',')[1]?.trim() || '-'}
+                                 </span>
+                             </div>
+                             <div className="p-3 flex justify-between items-center">
+                                 <span className="text-xs text-slate-500 font-medium">State</span>
+                                 <span className="text-sm text-slate-900 font-semibold">
+                                     {selectedBookDetail.address.split(',')[2]?.trim() || '-'}
+                                 </span>
+                             </div>
+                        </div>
+                     </div>
+                  </div>
+
+                  <div className="border-t border-slate-100 pt-6">
+                      <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center"><Clock size={14} className="mr-2 text-indigo-500" /> Timeline</h4>
+                      <div className="relative pl-4 space-y-6">
+                          <div className="absolute left-[23px] top-2 bottom-4 w-0.5 bg-slate-100"></div>
+                          <div className="relative flex gap-4 items-start">
+                             <div className={`w-5 h-5 rounded-full flex items-center justify-center z-10 ${selectedBookDetail.status === 'Distributed' || selectedBookDetail.status === 'Registered' || selectedBookDetail.status === 'Submitted' ? 'bg-indigo-100 text-indigo-600 ring-4 ring-white' : 'bg-slate-100 text-slate-400'}`}><Truck size={10} /></div>
+                             <div><p className="text-xs font-bold text-slate-700">Distributed</p><p className="text-[10px] text-slate-500">{formatDate(selectedBookDetail.date)}</p></div>
+                          </div>
+                          <div className="relative flex gap-4 items-start">
+                             <div className={`w-5 h-5 rounded-full flex items-center justify-center z-10 ${selectedBookDetail.status === 'Registered' || selectedBookDetail.status === 'Submitted' ? 'bg-blue-100 text-blue-600 ring-4 ring-white' : 'bg-slate-100 text-slate-400 ring-4 ring-white'}`}><User size={10} /></div>
+                             <div><p className={`text-xs font-bold ${selectedBookDetail.status === 'Registered' || selectedBookDetail.status === 'Submitted' ? 'text-slate-700' : 'text-slate-400'}`}>Registered</p><p className="text-[10px] text-slate-500">{selectedBookDetail.regDate}</p></div>
+                          </div>
+                          <div className="relative flex gap-4 items-start">
+                             <div className={`w-5 h-5 rounded-full flex items-center justify-center z-10 ${selectedBookDetail.status === 'Submitted' ? 'bg-green-100 text-green-600 ring-4 ring-white' : 'bg-slate-100 text-slate-400 ring-4 ring-white'}`}><CheckCircle size={10} /></div>
+                             <div><p className={`text-xs font-bold ${selectedBookDetail.status === 'Submitted' ? 'text-slate-700' : 'text-slate-400'}`}>Submitted</p><p className="text-[10px] text-slate-500">{selectedBookDetail.status === 'Submitted' ? 'Completed' : 'Pending'}</p></div>
+                          </div>
+                      </div>
+                  </div>
+               </div>
+               <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0 text-center"><button onClick={() => setSelectedBookDetail(null)} className="text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors">Close Panel</button></div>
+            </div>
+         </div>
+      )}
+
+      {/* Header & Tabs ... */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">Book Distribution</h2>
-          <p className="text-slate-500 text-sm mt-1">Manage print batches and assign books to network.</p>
-        </div>
+        <div><h2 className="text-2xl font-bold text-slate-800">Book Distribution</h2><p className="text-slate-500 text-sm mt-1">Manage print batches and assign books to network.</p></div>
         <div className="flex gap-2">
-          {canDistribute && (
-            <button 
-              type="button"
-              onClick={openNewDistributionModal}
-              className="flex items-center bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition shadow-sm font-medium text-sm"
-            >
-              <Plus size={18} className="mr-2" />
-              New Distribution
-            </button>
-          )}
-          {canManageBatches && (
-            <button 
-              type="button"
-              onClick={openCreateBatchModal}
-              className="flex items-center bg-white border border-indigo-600 text-indigo-600 px-4 py-2 rounded-md hover:bg-indigo-50 transition shadow-sm font-medium text-sm"
-            >
-              <Printer size={18} className="mr-2" />
-              Create Print Batch
-            </button>
-          )}
+          {canDistribute && (<button type="button" onClick={openNewDistributionModal} className="flex items-center bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition shadow-sm font-medium text-sm"><Plus size={18} className="mr-2" /> New Distribution</button>)}
+          {canManageBatches && (<button type="button" onClick={openCreateBatchModal} className="flex items-center bg-white border border-indigo-600 text-indigo-600 px-4 py-2 rounded-md hover:bg-indigo-50 transition shadow-sm font-medium text-sm"><Printer size={18} className="mr-2" /> Create Print Batch</button>)}
         </div>
       </div>
-
       <div className="border-b border-slate-200 shrink-0">
           <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setActiveTab('distribution')}
-              className={`${
-                activeTab === 'distribution'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
-            >
-              <Package className="mr-2 h-4 w-4" />
-              Distributed Books
-            </button>
-            <button
-              onClick={() => setActiveTab('batches')}
-              className={`${
-                activeTab === 'batches'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
-            >
-              <Printer className="mr-2 h-4 w-4" />
-              Print Batches
-            </button>
+            <button onClick={() => setActiveTab('distribution')} className={`${activeTab === 'distribution' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}><Package className="mr-2 h-4 w-4" /> Distributed Books</button>
+            <button onClick={() => setActiveTab('batches')} className={`${activeTab === 'batches' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}><Printer className="mr-2 h-4 w-4" /> Print Batches</button>
           </nav>
       </div>
 
+      {/* Main Content Table ... */}
       <div className="flex-1 relative">
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
           <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between gap-4 shrink-0 bg-slate-50">
-             <div className="relative max-w-sm w-full">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-4 w-4 text-slate-400" />
-                </div>
-                <input 
-                  type="text" 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-md leading-5 bg-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-shadow"
-                  placeholder={activeTab === 'distribution' ? "Search recipient, book #..." : "Search batch name, status..."}
-                />
-             </div>
-             <div className="flex gap-2">
-                <button 
-                  onClick={() => {
-                    setImportModalOpen(true);
-                    resetImport();
-                  }}
-                  className="flex items-center px-3 py-2 border border-slate-300 rounded-md text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"
-                >
-                   <Upload size={16} className="mr-2" />
-                   Import
-                </button>
-                <button 
-                  onClick={handleExport}
-                  className="flex items-center px-3 py-2 border border-slate-300 rounded-md text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"
-                >
-                   <Download size={16} className="mr-2" />
-                   Export
-                </button>
-             </div>
+             <div className="relative max-w-sm w-full"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Search className="h-4 w-4 text-slate-400" /></div><input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-md leading-5 bg-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-shadow" placeholder={activeTab === 'distribution' ? "Search recipient, book #..." : "Search batch name, status..."} /></div>
+             <div className="flex gap-2"><button onClick={() => { setImportModalOpen(true); resetImport(); }} className="flex items-center px-3 py-2 border border-slate-300 rounded-md text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"><Upload size={16} className="mr-2" /> Import</button><button onClick={handleExport} className="flex items-center px-3 py-2 border border-slate-300 rounded-md text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors"><Download size={16} className="mr-2" /> Export</button></div>
           </div>
 
           <div className="overflow-auto flex-1">
             {isDataLoading ? (
-               <div className="flex items-center justify-center h-full text-slate-400">
-                  <Loader2 className="animate-spin mr-2" /> Loading Data...
-               </div>
+               <div className="flex items-center justify-center h-full text-slate-400"><Loader2 className="animate-spin mr-2" /> Loading Data...</div>
             ) : (
                 <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-50 sticky top-0 z-10">
@@ -671,50 +874,42 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
                  {activeTab === 'distribution' && (
                    filteredDistributedList.map((item) => {
                      const isExpanded = expandedRowId === item.id;
+                     const totalDistributed = item.count || 0;
+                     const pendingRegistered = Math.max(0, totalDistributed - (item.registeredCount || 0));
+                     const pendingSubmitted = Math.max(0, totalDistributed - (item.submittedCount || 0));
+                     
+                     const bookList = generateBookGrid(item);
+                     const filteredBookList = detailFilter === 'All' ? bookList : bookList.filter((b: any) => b.status === detailFilter);
+
                      return (
                        <React.Fragment key={item.id}>
                          <tr className={`transition-colors border-b border-slate-100 ${isExpanded ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}`} onClick={() => handleToggleExpand(item.id)}>
                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 align-top">{formatDate(item.date)}</td>
                            <td className="px-6 py-4 whitespace-nowrap align-top">
                               <div className="flex items-center">
-                                 <div className="flex-shrink-0 h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs">
-                                    {item.name ? item.name.charAt(0) : '?'}
-                                 </div>
-                                 <div className="ml-4">
-                                    <div className="text-sm font-medium text-slate-900">{item.name}</div>
-                                    <div className="text-sm text-slate-500">{item.phone}</div>
-                                 </div>
+                                 <div className="flex-shrink-0 h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs">{item.name ? item.name.charAt(0) : '?'}</div>
+                                 <div className="ml-4"><div className="text-sm font-medium text-slate-900">{item.name}</div><div className="text-sm text-slate-500">{item.phone}</div></div>
                               </div>
                            </td>
-                           <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 align-top">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-800">{item.type}</span>
-                           </td>
+                           <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 align-top"><span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-800">{item.type}</span></td>
                            <td className="px-6 py-4 whitespace-nowrap text-sm align-top">
-                              <div className="flex flex-col">
+                              <div className="flex flex-col items-start gap-1">
                                  <span className="font-bold text-slate-900">{item.count ? item.count.toLocaleString() : '0'} Books</span>
-                                 <span className="text-xs text-slate-500 font-mono mt-0.5">{item.range}</span>
+                                 <span className="text-xs text-slate-500 font-mono">{item.range}</span>
+                                 {item.batchName && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100 shadow-sm">{item.batchName}</span>}
                               </div>
                            </td>
                            <td className="px-6 py-3 whitespace-nowrap align-top">
-                              <div className="flex flex-col gap-1.5">
-                                 <div className="flex items-center text-xs">
-                                    <span className={`w-1.5 h-1.5 rounded-full mr-2 ${item.registeredCount > 0 ? 'bg-blue-500' : 'bg-slate-300'}`}></span>
-                                    <span className="font-semibold text-slate-700 min-w-[70px]">Registered:</span>
-                                    <span className="font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">{item.registeredCount || 0}</span>
-                                 </div>
-                                 <div className="flex items-center text-xs">
-                                    <span className={`w-1.5 h-1.5 rounded-full mr-2 ${item.submittedCount > 0 ? 'bg-green-500' : 'bg-slate-300'}`}></span>
-                                    <span className="font-semibold text-slate-700 min-w-[70px]">Submitted:</span>
-                                    <span className="font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded">{item.submittedCount || 0}</span>
-                                 </div>
+                              <div className="flex flex-col gap-2 w-48">
+                                 <div className="flex items-center justify-between text-xs bg-slate-50 p-1.5 rounded border border-slate-100"><span className="text-slate-600 font-medium">Distributed</span><span className="font-bold text-slate-900">{totalDistributed}</span></div>
+                                 <div className="flex items-center justify-between text-xs"><span className="text-slate-500">Registered</span><div className="flex items-center gap-1.5"><span className="font-bold text-blue-600">{item.registeredCount || 0}</span><span className="text-slate-300">|</span><span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${pendingRegistered > 0 ? 'bg-amber-50 text-amber-700 border border-amber-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>{pendingRegistered}</span></div></div>
+                                 <div className="flex items-center justify-between text-xs"><span className="text-slate-500">Submitted</span><div className="flex items-center gap-1.5"><span className="font-bold text-green-600">{item.submittedCount || 0}</span><span className="text-slate-300">|</span><span className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${pendingSubmitted > 0 ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>{pendingSubmitted}</span></div></div>
                               </div>
                            </td>
                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium align-middle">
                               <div className="flex items-center justify-end gap-2">
                                 <button onClick={(e) => openEditDistributionModal(e, item)} className="inline-flex items-center text-indigo-600 hover:text-indigo-900 transition-colors bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-md"><Edit size={14} className="mr-1.5" /> Edit</button>
-                                <button className={`p-1.5 rounded-full transition-colors ${isExpanded ? 'bg-indigo-100 text-indigo-700' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-100'}`}>
-                                   {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                                </button>
+                                <button className={`p-1.5 rounded-full transition-colors ${isExpanded ? 'bg-indigo-100 text-indigo-700' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-100'}`}>{isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</button>
                               </div>
                            </td>
                          </tr>
@@ -722,32 +917,23 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
                             <tr className="bg-slate-50/50 animate-in fade-in duration-200">
                                <td colSpan={6} className="px-6 py-4">
                                   <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
-                                     <div className="flex justify-between items-center mb-3">
-                                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center">
-                                           <Book size={14} className="mr-2" /> Book Lifecycle Details
-                                        </h4>
-                                        {item.batchName && (
-                                           <div className="flex items-center bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full">
-                                              <span className="text-[10px] text-indigo-500 mr-1.5 font-bold uppercase tracking-wide">Batch</span>
-                                              <Tag size={12} className="text-indigo-400 mr-1" />
-                                              <span className="text-sm font-bold text-indigo-700 font-mono">{item.batchName}</span>
-                                           </div>
-                                        )}
-                                     </div>
-                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div className="space-y-2">
-                                           <div className="flex justify-between items-center border-b border-slate-100 pb-2"><span className="text-sm font-semibold text-blue-700">Registered Books ({item.registeredCount || 0})</span></div>
-                                           {item.registeredSeries && item.registeredSeries.length > 0 ? (
-                                              <div className="flex flex-wrap gap-2">{item.registeredSeries.map((bookNum: string, idx: number) => (<span key={idx} className="inline-flex items-center px-2 py-1 rounded text-xs font-mono bg-blue-50 text-blue-700 border border-blue-100">{bookNum}</span>))}</div>
-                                           ) : <p className="text-xs text-slate-400 italic">No books registered yet.</p>}
-                                        </div>
-                                        <div className="space-y-2">
-                                           <div className="flex justify-between items-center border-b border-slate-100 pb-2"><span className="text-sm font-semibold text-green-700">Submitted Books ({item.submittedCount || 0})</span></div>
-                                           {item.submittedSeries && item.submittedSeries.length > 0 ? (
-                                              <div className="flex flex-wrap gap-2">{item.submittedSeries.map((bookNum: string, idx: number) => (<span key={idx} className="inline-flex items-center px-2 py-1 rounded text-xs font-mono bg-green-50 text-green-700 border border-green-100">{bookNum}</span>))}</div>
-                                           ) : <p className="text-xs text-slate-400 italic">No books submitted yet.</p>}
+                                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+                                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center"><Book size={14} className="mr-2" /> Book Lifecycle Details</h4>
+                                        <div className="flex gap-1 bg-slate-100 p-1 rounded-md">
+                                           {(['All', 'Distributed', 'Registered', 'Submitted'] as const).map(filter => (
+                                              <button key={filter} onClick={(e) => { e.stopPropagation(); setDetailFilter(filter); }} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wide rounded-md transition-all ${detailFilter === filter ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{filter}</button>
+                                           ))}
                                         </div>
                                      </div>
+                                     <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-2 max-h-60 overflow-y-auto p-1">
+                                         {filteredBookList.map((book: any) => (
+                                             <button key={book.number} onClick={(e) => handleBookGridClick(e, book.number, book.status, item)} className={`flex flex-col items-center justify-center py-2 rounded border text-[10px] font-mono transition-all hover:shadow-md active:scale-95 ${book.status === 'Submitted' ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : book.status === 'Registered' ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`} title={`${book.number} - ${book.status}`}>
+                                                <span className="font-bold">{book.number}</span>
+                                                <span className="text-[8px] uppercase mt-0.5 opacity-80">{book.status}</span>
+                                             </button>
+                                         ))}
+                                     </div>
+                                     {filteredBookList.length === 0 && <div className="text-center py-8 text-slate-400 text-xs italic">No books found for filter "{detailFilter}"</div>}
                                   </div>
                                </td>
                             </tr>
@@ -763,17 +949,9 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{batch.printedDate ? new Date(batch.printedDate).toLocaleDateString() : '-'}</td>
                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-mono">{batch.startSerial} - {batch.endSerial}</td>
                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{batch.totalBooks ? batch.totalBooks.toLocaleString() : '0'}</td>
-                       <td className="px-6 py-4 whitespace-nowrap text-sm text-indigo-700 font-bold">
-                          {getAvailableBooks(batch).toLocaleString()}
-                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${batch.status === 'Fully Distributed' ? 'bg-green-100 text-green-800' : batch.status === 'Partially Distributed' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-800'}`}>{batch.status}</span>
-                       </td>
-                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex items-center justify-end gap-2">
-                            <button onClick={(e) => openEditBatchModal(e, batch)} className="inline-flex items-center text-indigo-600 hover:text-indigo-900 transition-colors bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-md"><Edit size={14} className="mr-1.5" /> Edit</button>
-                          </div>
-                       </td>
+                       <td className="px-6 py-4 whitespace-nowrap text-sm text-indigo-700 font-bold">{getAvailableBooks(batch).toLocaleString()}</td>
+                       <td className="px-6 py-4 whitespace-nowrap"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${batch.status === 'Fully Distributed' ? 'bg-green-100 text-green-800' : batch.status === 'Partially Distributed' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-800'}`}>{batch.status}</span></td>
+                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium"><div className="flex items-center justify-end gap-2"><button onClick={(e) => openEditBatchModal(e, batch)} className="inline-flex items-center text-indigo-600 hover:text-indigo-900 transition-colors bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-md"><Edit size={14} className="mr-1.5" /> Edit</button></div></td>
                      </tr>
                    ))
                  )}
@@ -783,7 +961,7 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
           </div>
         </div>
 
-        {/* ... Modals (Import, New Distribution, Create Batch) ... */}
+        {/* ... Modals ... */}
         {/* --- New/Edit Distribution Modal --- */}
         {formOpen && activeTab === 'distribution' && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -796,9 +974,9 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
                 <div className="overflow-y-auto p-6 bg-slate-50/50">
                   <form id="distribution-form" onSubmit={handleDistribute}>
                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col h-full">
-                           <div className="px-5 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2"><div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-md"><User size={18} /></div><h4 className="font-semibold text-slate-800">Recipient Details</h4></div>
-                           <div className="p-5 space-y-4 flex-1">
+                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col h-full relative"> {/* Removed overflow-hidden for dropdowns */}
+                           <div className="px-5 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2 rounded-t-xl"><div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-md"><User size={18} /></div><h4 className="font-semibold text-slate-800">Recipient Details</h4></div>
+                           <div className="p-5 space-y-4 flex-1 relative z-20"> {/* Added relative z-20 */}
                               <div><label className="block text-sm font-medium text-slate-700 mb-1">Date</label><input type="date" name="date" required value={formData.date} onChange={handleInputChange} className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm" /></div>
                               <div><label className="block text-sm font-medium text-slate-700 mb-1">Recipient Type</label><select name="recipientType" value={formData.recipientType} onChange={handleInputChange} className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm"><option value="Individual">Individual Person</option><option value="Center">Center Incharge</option><option value="District">District Incharge</option><option value="Autonomous">Autonomous Body</option></select></div>
                               <div><label className="block text-sm font-medium text-slate-700 mb-1">Full Name <span className="text-red-500">*</span></label><input type="text" name="recipientName" required value={formData.recipientName} onChange={handleInputChange} className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" placeholder="Recipient Name" /></div>
@@ -806,61 +984,111 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
                                 <div><label className="block text-sm font-medium text-slate-700 mb-1">Phone <span className="text-red-500">*</span></label><input type="tel" name="phone" required value={formData.phone} onChange={handleInputChange} className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" /></div>
                                 <div><label className="block text-sm font-medium text-slate-700 mb-1">PSSM ID</label><input type="text" name="pssmId" value={formData.pssmId} onChange={handleInputChange} className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" placeholder="Optional" /></div>
                               </div>
-                              <div><label className="block text-sm font-medium text-slate-700 mb-1">Address</label><textarea name="address" rows={3} value={formData.address} onChange={handleInputChange} className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" placeholder="Enter full address"></textarea></div>
+                              
+                              {/* Location Cascading Dropdowns */}
+                              <div className="space-y-3 pt-2 border-t border-slate-100 mt-2">
+                                  <h5 className="text-xs font-bold text-slate-500 uppercase">Location</h5>
+                                  <SearchableSelect 
+                                      label="State"
+                                      value={location.state}
+                                      options={Object.keys(LOCATION_DATA)}
+                                      onChange={(val) => setLocation({ state: val, district: '', town: '' })}
+                                      placeholder="Select State"
+                                  />
+                                  <SearchableSelect 
+                                      label="District"
+                                      value={location.district}
+                                      options={location.state ? Object.keys(LOCATION_DATA[location.state] || {}) : []}
+                                      onChange={(val) => setLocation(prev => ({ ...prev, district: val, town: '' }))}
+                                      placeholder="Select District"
+                                      disabled={!location.state}
+                                  />
+                                  <SearchableSelect 
+                                      label="Town / Mandal"
+                                      value={location.town}
+                                      options={location.district ? (LOCATION_DATA[location.state]?.[location.district] || []) : []}
+                                      onChange={(val) => setLocation(prev => ({ ...prev, town: val }))}
+                                      placeholder="Select Town"
+                                      disabled={!location.district}
+                                  />
+                              </div>
                            </div>
                         </div>
-                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col h-full">
-                           <div className="px-5 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2"><div className="p-1.5 bg-emerald-100 text-emerald-600 rounded-md"><Package size={18} /></div><h4 className="font-semibold text-slate-800">Book Assignment</h4></div>
+
+                        {/* Book Assignment Card */}
+                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col h-full relative z-10"> {/* Removed overflow-hidden */}
+                           <div className="px-5 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2 rounded-t-xl"><div className="p-1.5 bg-emerald-100 text-emerald-600 rounded-md"><Package size={18} /></div><h4 className="font-semibold text-slate-800">Book Assignment</h4></div>
                            <div className="p-5 space-y-4 flex-1">
                               <div>
                                  <label className="block text-sm font-medium text-slate-700 mb-1">Batch Number</label>
                                  <div className="relative">
-                                    <select 
-                                      name="batchNumber" 
-                                      value={formData.batchNumber} 
-                                      onChange={handleInputChange}
-                                      className="block w-full pl-3 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm bg-white"
-                                    >
+                                    <select name="batchNumber" value={formData.batchNumber} onChange={handleInputChange} className="block w-full pl-3 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm bg-white">
                                        <option value="">Select Batch</option>
-                                       {batchesList.map(batch => (
-                                          <option key={batch.id} value={batch.batchName}>
-                                             {batch.batchName} ({getAvailableBooks(batch)} Avail)
-                                          </option>
-                                       ))}
+                                       {batchesList.map(batch => <option key={batch.id} value={batch.batchName}>{batch.batchName} ({getAvailableBooks(batch)} Avail)</option>)}
                                     </select>
                                  </div>
-                                 {selectedBatchAvailable !== null && (
-                                    <p className="text-xs text-emerald-600 mt-1 font-medium">Available Books: {selectedBatchAvailable}</p>
-                                 )}
+                                 {selectedBatchAvailable !== null && <p className="text-xs text-emerald-600 mt-1 font-medium">Available Books: {selectedBatchAvailable}</p>}
                               </div>
-                              <div><label className="block text-sm font-medium text-slate-700 mb-1">Number of Books <span className="text-red-500">*</span></label><input type="number" name="numberOfBooks" required min="1" value={formData.numberOfBooks} onChange={handleInputChange} className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 font-bold text-slate-900" placeholder="0" /></div>
                               
-                              {formError && (
-                                 <div className="bg-red-50 border border-red-200 rounded-md p-3 flex items-start">
-                                    <AlertTriangle size={16} className="text-red-500 mt-0.5 mr-2 shrink-0" />
-                                    <p className="text-sm text-red-700 font-medium">{formError}</p>
-                                 </div>
-                              )}
-
-                              <div className="grid grid-cols-2 gap-4">
-                                <div><label className="block text-sm font-medium text-slate-700 mb-1">Start Serial <span className="text-red-500">*</span></label><input type="text" name="startSerial" required value={formData.startSerial} onChange={handleInputChange} className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 font-mono text-sm" /></div>
-                                <div><label className="block text-sm font-medium text-slate-700 mb-1">End Serial <span className="text-red-500">*</span></label><input type="text" name="endSerial" required value={formData.endSerial} onChange={handleInputChange} className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 font-mono text-sm" /></div>
+                              {/* New Book Series Builder */}
+                              <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                  <h5 className="text-xs font-bold text-slate-700 uppercase">Add Books</h5>
+                                  <div className="flex gap-2 items-end">
+                                      <div className="flex-1">
+                                          <label className="text-[10px] text-slate-500 block mb-1">Start Serial</label>
+                                          <input type="text" value={tempSerial.start} onChange={e => setTempSerial({...tempSerial, start: e.target.value})} className="w-full text-xs p-1.5 border rounded font-mono" />
+                                      </div>
+                                      <div className="flex-1">
+                                          <label className="text-[10px] text-slate-500 block mb-1">End Serial</label>
+                                          <input type="text" value={tempSerial.end} onChange={e => setTempSerial({...tempSerial, end: e.target.value})} className="w-full text-xs p-1.5 border rounded font-mono" />
+                                      </div>
+                                      <button type="button" onClick={handleAddBookRange} className="bg-indigo-600 text-white p-1.5 rounded hover:bg-indigo-700"><Plus size={16} /></button>
+                                  </div>
+                                  <div className="flex gap-2 items-end border-t border-slate-200 pt-2">
+                                      <div className="flex-1">
+                                          <label className="text-[10px] text-slate-500 block mb-1">Single Book #</label>
+                                          <input type="text" value={tempSerial.single} onChange={e => setTempSerial({...tempSerial, single: e.target.value})} className="w-full text-xs p-1.5 border rounded font-mono" />
+                                      </div>
+                                      <button type="button" onClick={handleAddSingleBook} className="bg-indigo-600 text-white p-1.5 rounded hover:bg-indigo-700"><Plus size={16} /></button>
+                                  </div>
                               </div>
-                              <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100 mt-4"><div className="flex justify-between items-center text-sm"><span className="text-emerald-800 font-medium">Availability Check</span><span className="text-emerald-600 flex items-center gap-1"><CheckCircle size={14} /> Available</span></div></div>
+
+                              {/* Chips Display */}
+                              <div className="min-h-[60px] p-2 border border-slate-200 rounded-lg bg-slate-50">
+                                  <p className="text-xs text-slate-500 mb-2">Selected Books ({bookChips.length})</p>
+                                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                                      {bookChips.length === 0 && <span className="text-xs text-slate-400 italic">No books added</span>}
+                                      {bookChips.map(book => (
+                                          <span key={book} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-white border border-slate-300 text-slate-700 shadow-sm font-mono">
+                                              {book}
+                                              <button type="button" onClick={() => handleRemoveBook(book)} className="ml-1 text-slate-400 hover:text-red-500"><X size={12} /></button>
+                                          </span>
+                                      ))}
+                                  </div>
+                              </div>
+
+                              {/* Total Count Display (ReadOnly) */}
+                              <div>
+                                  <label className="block text-sm font-medium text-slate-700 mb-1">Total Count</label>
+                                  <input type="text" readOnly value={bookChips.length} className="block w-full px-3 py-2 border border-slate-200 bg-slate-100 rounded-lg text-slate-500 font-bold" />
+                              </div>
+
+                              {formError && <div className="bg-red-50 border border-red-200 rounded-md p-3 flex items-start"><AlertTriangle size={16} className="text-red-500 mt-0.5 mr-2 shrink-0" /><p className="text-sm text-red-700 font-medium">{formError}</p></div>}
                            </div>
                         </div>
                      </div>
+                     <div className="px-6 py-4 border-t border-slate-100 bg-white rounded-b-xl shrink-0 flex justify-end gap-3 mt-4">
+                        <button type="button" onClick={() => setFormOpen(false)} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium text-sm shadow-sm">Cancel</button>
+                        <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-sm transition-colors font-medium text-sm">{editingDistributionId ? 'Update Distribution' : 'Confirm Distribution'}</button>
+                     </div>
                   </form>
-                </div>
-                <div className="px-6 py-4 border-t border-slate-100 bg-white rounded-b-xl shrink-0 flex justify-end gap-3">
-                   <button type="button" onClick={() => setFormOpen(false)} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium text-sm shadow-sm">Cancel</button>
-                   <button type="submit" form="distribution-form" className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-sm transition-colors font-medium text-sm">{editingDistributionId ? 'Update Distribution' : 'Confirm Distribution'}</button>
                 </div>
              </div>
           </div>
         )}
 
-        {/* --- Create Batch Modal --- */}
+        {/* ... (Keep other modals: Import, Create Batch) ... */}
+        {/* ... REVISED IMPORT MODAL WITH STEPS (Keep as is) ... */}
         {batchModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setBatchModalOpen(false)}></div>
@@ -884,6 +1112,131 @@ const Distribution: React.FC<DistributionProps> = ({ role }) => {
         )}
 
         {/* ... REVISED IMPORT MODAL WITH STEPS (Keep as is) ... */}
+        {importModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+             <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setImportModalOpen(false)}></div>
+             <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl z-10 flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+                <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100 bg-white rounded-t-xl shrink-0">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800">
+                      Import {activeTab === 'distribution' ? 'Distribution' : 'Batches'}
+                    </h3>
+                    <p className="text-sm text-slate-500">Add multiple records via CSV upload.</p>
+                  </div>
+                  <button onClick={() => setImportModalOpen(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-full">
+                    <X size={20} />
+                  </button>
+                </div>
+                
+                <div className="p-6 overflow-y-auto flex-1">
+                  {importStep === 'idle' && (
+                    <div className="space-y-6">
+                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                          <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                             <FileSpreadsheet size={16} className="text-emerald-600" /> Required Format
+                          </h4>
+                          <div className="overflow-x-auto">
+                             <table className="min-w-full text-xs text-left">
+                                <thead className="bg-slate-100 border-b border-slate-200">
+                                   <tr>
+                                      {getSampleData().headers.map((h, i) => (
+                                         <th key={i} className="px-3 py-2 font-medium text-slate-600 whitespace-nowrap">{h}</th>
+                                      ))}
+                                   </tr>
+                                </thead>
+                                <tbody>
+                                   <tr className="bg-white">
+                                      {getSampleData().row.map((d, i) => (
+                                         <td key={i} className="px-3 py-2 text-slate-500 border-b border-slate-100 whitespace-nowrap">{d}</td>
+                                      ))}
+                                   </tr>
+                                </tbody>
+                             </table>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-2 italic">* Ensure headers match exactly as shown above.</p>
+                       </div>
+
+                       <div className="flex justify-center">
+                          <button onClick={downloadTemplate} className="flex items-center text-indigo-600 hover:text-indigo-800 text-sm font-medium hover:underline">
+                             <Download size={14} className="mr-1" /> Download Empty Template
+                          </button>
+                       </div>
+
+                       <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:bg-slate-50 transition-colors cursor-pointer relative">
+                          <input ref={fileInputRef} type="file" accept=".csv" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileSelect} />
+                          <div className="flex flex-col items-center">
+                             <div className="p-3 bg-indigo-50 text-indigo-500 rounded-full mb-3"><Upload size={24} /></div>
+                             <p className="text-sm font-medium text-slate-900">Click to upload CSV file</p>
+                             <p className="text-xs text-slate-500 mt-1">Maximum size 5MB</p>
+                          </div>
+                       </div>
+                    </div>
+                  )}
+
+                  {importStep === 'fileSelected' && (
+                     <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                        <div className="p-4 bg-indigo-50 rounded-full text-indigo-600"><FileText size={48} /></div>
+                        <div className="text-center">
+                           <p className="text-lg font-medium text-slate-900">{selectedFile?.name}</p>
+                           <p className="text-sm text-slate-500">{(selectedFile?.size || 0) / 1000} KB</p>
+                        </div>
+                        <div className="flex gap-3 mt-4">
+                           <button onClick={resetImport} className="px-4 py-2 border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50 text-sm font-medium">Remove</button>
+                           <button onClick={validateFile} className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium shadow-sm">Validate File</button>
+                        </div>
+                     </div>
+                  )}
+
+                  {importStep === 'validating' && (
+                     <div className="flex flex-col items-center justify-center py-12">
+                        <Loader2 className="h-10 w-10 text-indigo-600 animate-spin mb-4" />
+                        <p className="text-slate-600 font-medium">Validating data structure...</p>
+                     </div>
+                  )}
+
+                  {importStep === 'report' && (
+                     <div className="space-y-4 h-full flex flex-col">
+                        <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
+                           <div className="flex gap-4">
+                              <span className="flex items-center text-sm font-medium text-emerald-700"><CheckCircle size={16} className="mr-1.5" /> {importReport.filter(r => r.status === 'valid').length} Valid</span>
+                              <span className="flex items-center text-sm font-medium text-red-700"><AlertTriangle size={16} className="mr-1.5" /> {importReport.filter(r => r.status === 'error').length} Errors</span>
+                           </div>
+                           {importReport.some(r => r.status === 'error') && (
+                              <button onClick={() => { setImportStep('idle'); setSelectedFile(null); }} className="text-xs text-slate-500 hover:text-indigo-600 flex items-center"><RefreshCw size={12} className="mr-1" /> Re-upload</button>
+                           )}
+                        </div>
+                        <div className="flex-1 overflow-auto border border-slate-200 rounded-lg max-h-[300px]">
+                           <table className="min-w-full divide-y divide-slate-200 text-sm">
+                              <thead className="bg-slate-50 sticky top-0">
+                                 <tr>
+                                    <th className="px-4 py-2 text-left font-medium text-slate-500">Row</th>
+                                    <th className="px-4 py-2 text-left font-medium text-slate-500">Status</th>
+                                    <th className="px-4 py-2 text-left font-medium text-slate-500">Message</th>
+                                 </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-slate-100">
+                                 {importReport.map((row) => (
+                                    <tr key={row.id} className={row.status === 'error' ? 'bg-red-50' : ''}>
+                                       <td className="px-4 py-2 text-slate-500">#{row.id}</td>
+                                       <td className="px-4 py-2">{row.status === 'valid' ? <span className="text-emerald-600 font-medium">Valid</span> : <span className="text-red-600 font-medium">Error</span>}</td>
+                                       <td className="px-4 py-2 text-slate-600">{row.message}</td>
+                                    </tr>
+                                 ))}
+                              </tbody>
+                           </table>
+                        </div>
+                     </div>
+                  )}
+                </div>
+                <div className="px-6 py-4 border-t border-slate-100 bg-white rounded-b-xl shrink-0 flex justify-end gap-3">
+                   <button onClick={() => setImportModalOpen(false)} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium text-sm">Cancel</button>
+                   {importStep === 'report' && importReport.some(r => r.status === 'valid') && (
+                      <button onClick={finalizeImport} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium text-sm shadow-sm">Import {importReport.filter(r => r.status === 'valid').length} Valid Rows</button>
+                   )}
+                </div>
+             </div>
+          </div>
+        )}
       </div>
     </div>
   );

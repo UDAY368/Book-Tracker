@@ -1,88 +1,310 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  BookOpen, CheckCircle, Clock, ChevronRight, Save, Upload, ArrowLeft, 
-  FileText, Loader2, IndianRupee, Printer, User, Hash, Search, Filter,
-  ChevronDown, ChevronUp, Calendar, Package, Edit, Trash2, Tag
+  BookOpen, CheckCircle, Clock, 
+  User, Filter, ArrowUpDown, RefreshCw, Heart, MapPin
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell 
 } from 'recharts';
 import { api } from '../../services/api';
-import { ReceiverBook, BookPage } from '../../types';
+import { ReceiverBook } from '../../types';
+
+// --- Constants & Data ---
+
+const LOCATION_DATA: Record<string, Record<string, string[]>> = {};
+
+const YAGAM_OPTIONS = [
+  "Dhyana Maha Yagam - 1", 
+  "Dhyana Maha Yagam - 2", 
+  "Dhyana Maha Yagam - 3", 
+  "Dhyana Maha Yagam - 4"
+];
+
+const getCentersForTown = (town: string) => {
+    return [];
+};
+
+// --- Helper Components ---
+
+const StatCard = ({ 
+  title, 
+  value, 
+  icon: Icon, 
+  colorClass, 
+  bgClass 
+}: { 
+  title: string, 
+  value: string | number, 
+  icon: any, 
+  colorClass: string, 
+  bgClass: string 
+}) => (
+  <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between transition-all hover:shadow-md">
+    <div>
+      <p className="text-xs text-slate-500 uppercase font-bold tracking-wide">{title}</p>
+      <h3 className="text-2xl font-bold text-slate-900 mt-1">{value}</h3>
+    </div>
+    <div className={`p-3 rounded-lg ${bgClass} ${colorClass}`}>
+      <Icon size={24} />
+    </div>
+  </div>
+);
+
+const FilterSelect = ({ 
+  label, 
+  value, 
+  onChange, 
+  options, 
+  disabled = false 
+}: { 
+  label: string, 
+  value: string, 
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void, 
+  options: string[], 
+  disabled?: boolean 
+}) => (
+  <div className="flex-1 min-w-[140px]">
+    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">{label}</label>
+    <div className="relative">
+      <select 
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        className="block w-full pl-3 pr-8 py-2 text-sm border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer appearance-none border shadow-sm"
+      >
+        <option value="">All {label}s</option>
+        {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+      </select>
+      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+        <ArrowUpDown size={12} />
+      </div>
+    </div>
+  </div>
+);
 
 const ReceiverDashboard: React.FC = () => {
-  const [books, setBooks] = useState<ReceiverBook[]>([]);
+  const [books, setBooks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Filters
+  const [selectedYagam, setSelectedYagam] = useState("Dhyana Maha Yagam - 4");
+  const [location, setLocation] = useState({ state: '', district: '', town: '', center: '' });
+  const [isRefining, setIsRefining] = useState(false);
 
   useEffect(() => {
     loadBooks();
-  }, []);
+  }, [selectedYagam]);
 
   const loadBooks = async () => {
     setLoading(true);
     const data = await api.getReceiverBooks();
-    setBooks(data);
+    
+    // Simulate Random Locations for the received data to make filters work in this demo
+    // Removed random location enrichment
+    const enrichedData = data.map((b, i) => {
+        return {
+            ...b,
+            state: b.state || '',
+            district: b.district || '',
+            town: b.town || '',
+            center: b.center || '',
+            isDonorUpdated: !!b.paymentMode 
+        };
+    });
+
+    setBooks(enrichedData);
     setLoading(false);
   };
 
+  // Handle Location Change
+  const handleLocationChange = (field: keyof typeof location, value: string) => {
+    setIsRefining(true);
+    setLocation(prev => {
+      const next = { ...prev, [field]: value };
+      if (field === 'state') { next.district = ''; next.town = ''; next.center = ''; }
+      if (field === 'district') { next.town = ''; next.center = ''; }
+      if (field === 'town') { next.center = ''; }
+      return next;
+    });
+    setTimeout(() => setIsRefining(false), 200);
+  };
+
+  const handleResetFilters = () => {
+    setIsRefining(true);
+    setLocation({ state: '', district: '', town: '', center: '' });
+    setTimeout(() => setIsRefining(false), 200);
+  };
+
+  // Filtered Data Computation
+  const filteredBooks = useMemo(() => {
+      return books.filter(b => {
+          if (location.state && b.state !== location.state) return false;
+          if (location.district && b.district !== location.district) return false;
+          if (location.town && b.town !== location.town) return false;
+          if (location.center && b.center !== location.center) return false;
+          return true;
+      });
+  }, [books, location]);
+
   // --- Stats Calculation ---
-  const totalDistributed = books.length;
-  const totalRegistered = books.filter(b => b.status === 'Registered').length;
-  const totalSubmitted = books.filter(b => b.status === 'Received').length;
-  const pendingBooks = books.filter(b => b.status !== 'Received').length;
+  const totalDistributed = filteredBooks.length;
+  const totalRegistered = filteredBooks.filter(b => b.status === 'Registered').length;
+  const totalSubmitted = filteredBooks.filter(b => b.status === 'Received').length;
+  const totalDonorUpdated = filteredBooks.filter(b => b.isDonorUpdated).length; // New Metric
+  const pendingBooks = filteredBooks.filter(b => b.status !== 'Received').length;
 
   const chartData = [
     { name: 'Distributed', value: totalDistributed, color: '#6366f1' },
     { name: 'Registered', value: totalRegistered, color: '#3b82f6' },
     { name: 'Submitted', value: totalSubmitted, color: '#10b981' },
+    { name: 'Donor Updated', value: totalDonorUpdated, color: '#8b5cf6' }, // Added to Chart
     { name: 'Pending', value: pendingBooks, color: '#f59e0b' },
   ];
 
-  if (loading) return <div className="p-8 text-center text-slate-400">Loading Inventory...</div>;
+  if (loading) return <div className="p-8 text-center text-slate-400">Loading Dashboard...</div>;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-         <div className="bg-white p-5 rounded-lg border border-slate-100 shadow-sm flex items-center justify-between border-l-4 border-l-indigo-500">
-            <div>
-               <p className="text-xs text-slate-500 uppercase font-semibold">Total Books Distributed</p>
-               <h3 className="text-2xl font-bold text-slate-900 mt-1">{totalDistributed}</h3>
+      {/* 1. Header & Context */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Receiver Dashboard</h2>
+          <p className="text-slate-500 text-sm mt-1">Monitor book collection and donor information updates.</p>
+        </div>
+        
+        <div className="w-full md:w-auto bg-indigo-50 p-2 rounded-lg border border-indigo-100">
+            <label className="block text-[10px] font-bold text-indigo-400 uppercase mb-1 ml-1">Event Context</label>
+            <div className="relative">
+                <select 
+                    value={selectedYagam}
+                    onChange={(e) => setSelectedYagam(e.target.value)}
+                    className="w-full md:w-64 appearance-none bg-white border border-indigo-200 text-indigo-700 font-bold py-2 pl-4 pr-10 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-sm shadow-sm"
+                >
+                    {YAGAM_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-indigo-600">
+                    <ArrowUpDown size={14} />
+                </div>
             </div>
-            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg"><BookOpen size={24} /></div>
+        </div>
+      </div>
+
+      {/* 2. Dashboard Scope Filters */}
+      <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+         <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+            <div className="flex items-center gap-2 text-slate-800 font-bold">
+                <Filter size={18} className="text-indigo-600" />
+                <span>Dashboard Scope</span>
+            </div>
+            {(location.state || location.district || location.town || location.center) && (
+                <button 
+                    onClick={handleResetFilters}
+                    className="text-xs font-medium text-red-600 hover:text-red-800 flex items-center gap-1 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-full transition-colors"
+                >
+                    <RefreshCw size={12} /> Reset
+                </button>
+            )}
          </div>
-         <div className="bg-white p-5 rounded-lg border border-slate-100 shadow-sm flex items-center justify-between border-l-4 border-l-blue-500">
-            <div>
-               <p className="text-xs text-slate-500 uppercase font-semibold">Total Books Registered</p>
-               <h3 className="text-2xl font-bold text-slate-900 mt-1">{totalRegistered}</h3>
-            </div>
-            <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><User size={24} /></div>
-         </div>
-         <div className="bg-white p-5 rounded-lg border border-slate-100 shadow-sm flex items-center justify-between border-l-4 border-l-emerald-500">
-            <div>
-               <p className="text-xs text-slate-500 uppercase font-semibold">Total Books Submitted</p>
-               <h3 className="text-2xl font-bold text-slate-900 mt-1">{totalSubmitted}</h3>
-            </div>
-            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg"><CheckCircle size={24} /></div>
-         </div>
-         <div className="bg-white p-5 rounded-lg border border-slate-100 shadow-sm flex items-center justify-between border-l-4 border-l-amber-500">
-            <div>
-               <p className="text-xs text-slate-500 uppercase font-semibold">Pending Books</p>
-               <h3 className="text-2xl font-bold text-slate-900 mt-1">{pendingBooks}</h3>
-            </div>
-            <div className="p-3 bg-amber-50 text-amber-600 rounded-lg"><Clock size={24} /></div>
+         
+         <div className="flex flex-col md:flex-row gap-4">
+            <FilterSelect 
+                label="State" 
+                value={location.state} 
+                onChange={(e) => handleLocationChange('state', e.target.value)} 
+                options={Object.keys(LOCATION_DATA)} 
+            />
+            <FilterSelect 
+                label="District" 
+                value={location.district} 
+                onChange={(e) => handleLocationChange('district', e.target.value)} 
+                options={location.state ? Object.keys(LOCATION_DATA[location.state]) : []}
+                disabled={!location.state}
+            />
+            <FilterSelect 
+                label="Mandal / Town" 
+                value={location.town} 
+                onChange={(e) => handleLocationChange('town', e.target.value)} 
+                options={location.district ? (LOCATION_DATA[location.state]?.[location.district] || []) : []}
+                disabled={!location.district}
+            />
+            <FilterSelect 
+                label="Center" 
+                value={location.center} 
+                onChange={(e) => handleLocationChange('center', e.target.value)} 
+                options={getCentersForTown(location.town)}
+                disabled={!location.town}
+            />
          </div>
       </div>
 
-      {/* Bar Chart */}
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-          <h3 className="text-lg font-bold text-slate-800 mb-6">Book Status Overview</h3>
+      {/* 3. KPI Cards */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 transition-opacity duration-300 ${isRefining ? 'opacity-60' : 'opacity-100'}`}>
+         {/* Renamed: Distributed Books */}
+         <StatCard 
+            title="Distributed Books" 
+            value={totalDistributed} 
+            icon={BookOpen} 
+            bgClass="bg-indigo-50" 
+            colorClass="text-indigo-600" 
+         />
+         {/* Renamed: Registered Books */}
+         <StatCard 
+            title="Registered Books" 
+            value={totalRegistered} 
+            icon={User} 
+            bgClass="bg-blue-50" 
+            colorClass="text-blue-600" 
+         />
+         {/* Renamed: Submitted Books */}
+         <StatCard 
+            title="Submitted Books" 
+            value={totalSubmitted} 
+            icon={CheckCircle} 
+            bgClass="bg-emerald-50" 
+            colorClass="text-emerald-600" 
+         />
+         {/* NEW CARD: Donor Updated */}
+         <StatCard 
+            title="Donor Updated" 
+            value={totalDonorUpdated} 
+            icon={Heart} 
+            bgClass="bg-purple-50" 
+            colorClass="text-purple-600" 
+         />
+         {/* Renamed: Pending Books */}
+         <StatCard 
+            title="Pending Books" 
+            value={pendingBooks} 
+            icon={Clock} 
+            bgClass="bg-amber-50" 
+            colorClass="text-amber-600" 
+         />
+      </div>
+
+      {/* 4. Bar Chart */}
+      <div className={`bg-white p-6 rounded-xl shadow-sm border border-slate-200 transition-opacity duration-300 ${isRefining ? 'opacity-60' : 'opacity-100'}`}>
+          <div className="flex justify-between items-center mb-6">
+             <h3 className="text-lg font-bold text-slate-800">Book Status Overview</h3>
+             <div className="text-sm text-slate-500 bg-slate-50 px-3 py-1 rounded border border-slate-100 flex items-center">
+                <MapPin size={14} className="mr-1.5" />
+                {location.center || location.town || location.district || location.state || 'All Locations'}
+             </div>
+          </div>
           <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }} barSize={60}>
+              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }} barSize={50}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" stroke="#64748b" axisLine={false} tickLine={false} dy={10} fontSize={12} fontWeight={500} />
+                  <XAxis 
+                    dataKey="name" 
+                    stroke="#64748b" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    dy={10} 
+                    fontSize={12} 
+                    fontWeight={600} 
+                  />
                   <YAxis stroke="#64748b" axisLine={false} tickLine={false} fontSize={12} />
                   <Tooltip 
                       cursor={{fill: '#f8fafc'}}

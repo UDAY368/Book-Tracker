@@ -15,7 +15,13 @@ import {
   HelpCircle,
   Edit,
   FileText,
-  UserPlus
+  UserPlus,
+  PlusCircle,
+  BookPlus,
+  CalendarRange,
+  PieChart,
+  Search,
+  UserCheck
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -38,14 +44,22 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const links = [
     { to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, roles: [UserRole.SUPER_ADMIN, UserRole.BOOK_DISTRIBUTOR, UserRole.INCHARGE, UserRole.BOOK_RECEIVER, UserRole.VOLUNTEER] },
+    { to: '/date-range-analytics', label: 'Date Analytics', icon: <CalendarRange size={20} />, roles: [UserRole.SUPER_ADMIN] },
+    { to: '/distribution-stats', label: 'Distribution Stats', icon: <PieChart size={20} />, roles: [UserRole.SUPER_ADMIN] },
+    { to: '/book-tracking', label: 'Book Tracking', icon: <Search size={20} />, roles: [UserRole.SUPER_ADMIN] },
+    { to: '/donor-tracking', label: 'Donor Tracking', icon: <UserCheck size={20} />, roles: [UserRole.SUPER_ADMIN] },
+    { to: '/add-distribution', label: 'Add Distribution', icon: <PlusCircle size={20} />, roles: [UserRole.BOOK_DISTRIBUTOR] },
+    { to: '/distribution', label: 'Distribution Info', icon: <BookOpen size={20} />, roles: [UserRole.BOOK_DISTRIBUTOR, UserRole.STAFF] },
     // Renamed 'Quick Update' to 'Book Submit'
     { to: '/book-update', label: 'Book Submit', icon: <Edit size={20} />, roles: [UserRole.BOOK_RECEIVER] },
     // Added 'Donor Submit'
     { to: '/donor-submit', label: 'Donor Submit', icon: <UserPlus size={20} />, roles: [UserRole.BOOK_RECEIVER] },
-    { to: '/book-register', label: 'Book Register', icon: <FileText size={20} />, roles: [UserRole.INCHARGE] },
-    { to: '/distribution', label: 'Distribution', icon: <BookOpen size={20} />, roles: [UserRole.SUPER_ADMIN, UserRole.BOOK_DISTRIBUTOR, UserRole.STAFF] },
+    // New Book Register Page for Incharge
+    { to: '/new-book-register', label: 'New Book Register', icon: <BookPlus size={20} />, roles: [UserRole.INCHARGE] },
+    // Old Book Register (Hidden for Incharge now, accessible by others if needed, or remove Incharge)
+    { to: '/book-register', label: 'Book Register', icon: <FileText size={20} />, roles: [] }, 
     { to: '/collection', label: 'Collection', icon: <UploadCloud size={20} />, roles: [UserRole.STAFF] },
-    { to: '/users', label: 'User Mgmt', icon: <Users size={20} />, roles: [UserRole.SUPER_ADMIN] },
+    { to: '/users', label: 'Users Info', icon: <Users size={20} />, roles: [UserRole.SUPER_ADMIN] },
     { to: '/analytics', label: 'Analytics', icon: <BarChart3 size={20} />, roles: [] }, 
     { to: '/leaderboard', label: 'Leaderboard', icon: <Trophy size={20} />, roles: [UserRole.SUPER_ADMIN] },
   ];
@@ -140,17 +154,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                 >
                   {link.label}
                 </span>
-
-                {/* Notification Badge for Super Admin User Mgmt */}
-                {link.label === 'User Mgmt' && role === UserRole.SUPER_ADMIN && isDesktopExpanded && (
-                   <span className="ml-auto bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm animate-pulse">
-                     {pendingApprovals}
-                   </span>
-                )}
-                {/* Collapsed Badge Dot */}
-                {link.label === 'User Mgmt' && role === UserRole.SUPER_ADMIN && !isDesktopExpanded && (
-                   <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 border border-slate-900"></span>
-                )}
 
                 {!isDesktopExpanded && (
                   <div className="absolute left-full top-1/2 transform -translate-y-1/2 ml-4 bg-slate-800 text-white text-xs px-2 py-1.5 rounded shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 hidden lg:block border border-slate-700">

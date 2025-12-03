@@ -1,3 +1,5 @@
+
+
 export enum UserRole {
   SUPER_ADMIN = 'Super Admin',
   BOOK_DISTRIBUTOR = 'Book Distributor',
@@ -47,7 +49,7 @@ export interface PrintBatch {
 
 export interface Book {
   id: string;
-  bookNumber: string; // Unique
+  bookNumber: string;
   batchNumber: string;
   status: BookStatus;
   distributedTo?: string; // ID of Incharge or Individual
@@ -59,14 +61,21 @@ export interface Book {
 
 export interface BookPage {
   pageNumber: number;
-  receiptNumber?: string; // New field
+  receiptNumber?: string;
   donorName?: string;
   donorPhone?: string;
   donorAddress?: string;
-  receiverName?: string; // New field
+  receiverName?: string;
   amount?: number;
   date?: string;
   isFilled: boolean;
+  // New fields for Donor Submit
+  state?: string;
+  district?: string;
+  town?: string;
+  paymentMode?: 'Online' | 'Offline';
+  transactionId?: string;
+  profession?: string; // Added profession
 }
 
 export interface ReceiverBook {
@@ -77,12 +86,19 @@ export interface ReceiverBook {
   assignedToName: string;   // The person returning the book
   assignedToPhone: string;  // Their phone number
   pssmId?: string;          // Their PSSM ID
+  distributorName?: string; // Added to track who distributed it
   totalPages: number;       // Defaults to 20
   filledPages: number;
   totalAmount: number;
   assignedDate: string;
   receivedDate?: string;
+  paymentMode?: 'Online' | 'Offline'; // New field for payment tracking
   pages?: BookPage[];       // Loaded on demand
+  // Enriched location data for filtering
+  state?: string;
+  district?: string;
+  town?: string;
+  center?: string;
 }
 
 export interface KPI {

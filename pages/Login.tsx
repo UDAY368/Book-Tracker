@@ -23,8 +23,8 @@ interface LoginProps {
 const DEMO_ACCOUNTS = [
   { role: UserRole.SUPER_ADMIN, email: 'admin@pssm.org', label: 'Super Admin', icon: <Shield size={14} /> },
   { role: UserRole.BOOK_DISTRIBUTOR, email: 'distributor@pssm.org', label: 'Distributor', icon: <Truck size={14} /> },
-  { role: UserRole.INCHARGE, email: 'incharge@pssm.org', label: 'Incharge', icon: <BookOpen size={14} /> },
-  { role: UserRole.BOOK_RECEIVER, email: 'receiver@pssm.org', label: 'Co Ordinator', icon: <Users size={14} /> },
+  { role: UserRole.INCHARGE, email: 'incharge@pssm.org', label: 'Staff', icon: <BookOpen size={14} /> },
+  { role: UserRole.BOOK_RECEIVER, email: 'receiver@pssm.org', label: 'Book Receiver', icon: <Users size={14} /> },
 ];
 
 const Login: React.FC<LoginProps> = ({ onLogin, onGoToSignup }) => {
@@ -82,7 +82,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onGoToSignup }) => {
 
         <div className="relative z-20">
           <div className="flex items-center gap-3 mb-8">
-            <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center font-bold text-xl shadow-lg shadow-emerald-500/30">P</div>
+            <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center font-bold text-xl shadow-lg shadow-emerald-500/30">P</div>
             <span className="text-2xl font-bold tracking-wide">PSSM Connect</span>
           </div>
           

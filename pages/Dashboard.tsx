@@ -1,9 +1,9 @@
-
-import React from 'react';
+import React, { useState } from 'react';
 import { UserRole, KPI } from '../types';
 import { 
   PieChart, Pie, Cell, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
+import { ArrowUpDown } from 'lucide-react';
 import { getMockKPIs, getBookStatusData, getMonthlyDonations } from '../services/mockData';
 import SuperAdminDashboard from '../components/dashboard/SuperAdminDashboard';
 import DistributorDashboard from '../components/dashboard/DistributorDashboard';
@@ -13,6 +13,13 @@ import ReceiverDashboard from '../components/dashboard/ReceiverDashboard';
 interface DashboardProps {
   role: UserRole;
 }
+
+const YAGAM_OPTIONS = [
+  "Dhyana Maha Yagam - 1", 
+  "Dhyana Maha Yagam - 2", 
+  "Dhyana Maha Yagam - 3", 
+  "Dhyana Maha Yagam - 4"
+];
 
 // Reusable Card Component with strict typing
 const KPICard: React.FC<{ item: KPI }> = ({ item }) => (
@@ -107,13 +114,33 @@ const Dashboard: React.FC = () => {
 };
 
 const DashboardContainer: React.FC<DashboardProps> = ({ role }) => {
+  const [selectedYagam, setSelectedYagam] = useState("Dhyana Maha Yagam - 4");
+
   // Super Admin View
   if (role === UserRole.SUPER_ADMIN) {
     return (
       <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">Super Admin Overview</h2>
-          <p className="text-slate-500 text-sm">Manage the entire PSSM donation ecosystem from here.</p>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">Super Admin Overview</h2>
+            <p className="text-slate-500 text-sm mt-1">Manage the entire PSSM donation ecosystem from here.</p>
+          </div>
+          
+          <div className="w-full md:w-auto bg-indigo-50 p-2 rounded-lg border border-indigo-100">
+              <label className="block text-[10px] font-bold text-indigo-400 uppercase mb-1 ml-1">Event Context</label>
+              <div className="relative">
+                  <select 
+                      value={selectedYagam}
+                      onChange={(e) => setSelectedYagam(e.target.value)}
+                      className="w-full md:w-64 appearance-none bg-white border border-indigo-200 text-indigo-700 font-bold py-2 pl-4 pr-10 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-sm"
+                  >
+                      {YAGAM_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-indigo-600">
+                      <ArrowUpDown size={14} />
+                  </div>
+              </div>
+          </div>
         </div>
         <SuperAdminDashboard />
       </div>
@@ -124,23 +151,15 @@ const DashboardContainer: React.FC<DashboardProps> = ({ role }) => {
   if (role === UserRole.BOOK_DISTRIBUTOR) {
     return (
       <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">Distributor Dashboard</h2>
-          <p className="text-slate-500 text-sm">Track inventory, shipments, and distribution gaps.</p>
-        </div>
         <DistributorDashboard />
       </div>
     );
   }
 
-  // Incharge View (Center, District, Autonomous)
-  if (role === UserRole.INCHARGE) {
+  // Staff / Incharge View (Center, District, Autonomous)
+  if (role === UserRole.INCHARGE || role === UserRole.STAFF) {
      return (
         <div className="space-y-6">
-           <div>
-             <h2 className="text-2xl font-bold text-slate-800">Incharge Workspace</h2>
-             <p className="text-slate-500 text-sm">Manage book distribution to donors and track collection.</p>
-           </div>
            <InchargeDashboard />
         </div>
      );
@@ -150,10 +169,6 @@ const DashboardContainer: React.FC<DashboardProps> = ({ role }) => {
   if (role === UserRole.BOOK_RECEIVER) {
     return (
       <div className="space-y-6 flex flex-col h-[calc(100vh-140px)]">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">Receiver Workspace</h2>
-          <p className="text-slate-500 text-sm">Verify registered books and collect returns.</p>
-        </div>
         <ReceiverDashboard />
       </div>
     );

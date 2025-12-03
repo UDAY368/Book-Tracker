@@ -5,9 +5,16 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import Distribution from './pages/Distribution';
+import DistributionStats from './pages/DistributionStats';
+import AddDistribution from './pages/AddDistribution';
 import BookUpdate from './pages/BookUpdate';
 import BookRegister from './pages/BookRegister';
+import NewBookRegister from './pages/NewBookRegister';
 import DonorSubmit from './pages/DonorSubmit';
+import DonorTracking from './pages/DonorTracking';
+import DateRangeAnalytics from './pages/DateRangeAnalytics';
+import BookTracking from './pages/BookTracking';
+import UsersInfo from './pages/UsersInfo';
 import Leaderboard from './components/Leaderboard';
 import { User } from './types';
 import { api } from './services/api';
@@ -17,16 +24,6 @@ const Collection = () => (
   <div className="p-6 bg-white rounded-lg shadow-sm border border-slate-200">
     <h2 className="text-2xl font-bold mb-4">Book Collection & Return</h2>
     <p className="text-slate-600">Module for Receiver and Incharges to mark books as returned and log collected amounts.</p>
-  </div>
-);
-
-const UserManagement = () => (
-  <div className="p-6 bg-white rounded-lg shadow-sm border border-slate-200">
-    <h2 className="text-2xl font-bold mb-4">User Management</h2>
-    <p className="text-slate-600">Super Admin console to approve pending users (Distributors, Receivers, Incharges).</p>
-    <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800">
-       <strong>3 Pending Approvals</strong> waiting for review.
-    </div>
   </div>
 );
 
@@ -107,11 +104,17 @@ const App: React.FC = () => {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard role={user.role} />} />
           <Route path="/distribution" element={<Distribution role={user.role} />} />
+          <Route path="/distribution-stats" element={<DistributionStats />} />
+          <Route path="/book-tracking" element={<BookTracking />} />
+          <Route path="/donor-tracking" element={<DonorTracking />} />
+          <Route path="/add-distribution" element={<AddDistribution role={user.role} />} />
           <Route path="/book-update" element={<BookUpdate />} />
           <Route path="/donor-submit" element={<DonorSubmit />} />
+          <Route path="/new-book-register" element={<NewBookRegister />} />
           <Route path="/book-register" element={<BookRegister />} />
+          <Route path="/date-range-analytics" element={<DateRangeAnalytics />} />
           <Route path="/collection" element={<Collection />} />
-          <Route path="/users" element={<UserManagement />} />
+          <Route path="/users" element={<UsersInfo />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/settings" element={<Settings />} />

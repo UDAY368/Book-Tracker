@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { 
@@ -21,7 +22,8 @@ import {
   CalendarRange,
   PieChart,
   Search,
-  UserCheck
+  UserCheck,
+  MapPin
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -48,6 +50,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { to: '/distribution-stats', label: 'Distribution Stats', icon: <PieChart size={20} />, roles: [UserRole.SUPER_ADMIN] },
     { to: '/book-tracking', label: 'Book Tracking', icon: <Search size={20} />, roles: [UserRole.SUPER_ADMIN] },
     { to: '/donor-tracking', label: 'Donor Tracking', icon: <UserCheck size={20} />, roles: [UserRole.SUPER_ADMIN] },
+    { to: '/add-location', label: 'Add Location', icon: <MapPin size={20} />, roles: [UserRole.SUPER_ADMIN] },
     { to: '/add-distribution', label: 'Add Distribution', icon: <PlusCircle size={20} />, roles: [UserRole.BOOK_DISTRIBUTOR] },
     { to: '/distribution', label: 'Distribution Info', icon: <BookOpen size={20} />, roles: [UserRole.BOOK_DISTRIBUTOR, UserRole.STAFF] },
     // Renamed 'Quick Update' to 'Book Submit'

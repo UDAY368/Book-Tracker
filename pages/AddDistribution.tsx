@@ -5,11 +5,8 @@ import { UserRole } from '../types';
 import { api } from '../services/api';
 import { 
   Plus, User, X, CheckCircle, 
-  Printer, Package, AlertTriangle, ChevronDown, ArrowUpDown
+  Printer, Package, AlertTriangle, ChevronDown, ArrowUpDown, RefreshCw
 } from 'lucide-react';
-
-// --- Mock Location Data (Empty) ---
-const LOCATION_DATA: Record<string, Record<string, string[]>> = {};
 
 const YAGAM_OPTIONS = [
   "Dhyana Maha Yagam - 1", 
@@ -17,10 +14,6 @@ const YAGAM_OPTIONS = [
   "Dhyana Maha Yagam - 3", 
   "Dhyana Maha Yagam - 4"
 ];
-
-const getCentersForTown = (town: string) => {
-    return [];
-};
 
 interface AddDistributionProps {
   role: UserRole;
@@ -46,24 +39,18 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
   
   const canManageBatches = role === UserRole.SUPER_ADMIN || role === UserRole.BOOK_DISTRIBUTOR;
   
-  // Default tab or based on navigation state or modal type
   const [activeTab, setActiveTab] = useState<Tab>(
     (isModal && editType === 'batch') || (locationState?.type === 'batch') 
       ? 'create_batch' 
       : 'new_distribution'
   );
   
-  // Toast Notification State
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
-
-  // Top Layer Filter
   const [selectedYagam, setSelectedYagam] = useState("Dhyana Maha Yagam - 4");
-
-  // Data State
   const [batchesList, setBatchesList] = useState<any[]>([]);
-
-  // Selected Batch Availability State for Form
+  const [locationData, setLocationData] = useState<any>({});
+  
   const [selectedBatchAvailable, setSelectedBatchAvailable] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -100,13 +87,25 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
   const [batchFormData, setBatchFormData] = useState(initialBatchFormData);
   const [editingBatchId, setEditingBatchId] = useState<number | string | null>(null);
 
-  // Load Data on Mount
   useEffect(() => {
     loadData();
   }, []);
 
-  // Handle Navigation State (Edit Mode) or Modal Props
-  useEffect(() => {
+  const loadData = async () => {
+    try {
+        const [batchData, locData] = await Promise.all([
+             api.getBatches(),
+             api.getLocations()
+        ]);
+        setBatchesList(batchData);
+        setLocationData(locData);
+    } catch (e) {
+        console.error("Failed to load data");
+    }
+  };
+
+  // Handle passed props or location state for editing
+   useEffect(() => {
     if (isModal && editData) {
         if (editType === 'distribution') {
             handleEditDistribution(editData);
@@ -123,15 +122,6 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
         }
     }
   }, [locationState, isModal, editData, editType, batchesList]); 
-
-  const loadData = async () => {
-    try {
-        const batchData = await api.getBatches();
-        setBatchesList(batchData);
-    } catch (e) {
-        console.error("Failed to load batch data");
-    }
-  };
 
   // --- Helper Component: Searchable Select ---
   const SearchableSelect = ({ 
@@ -180,7 +170,7 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
                         key={opt}
                         className="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-indigo-50 text-slate-900"
                         onMouseDown={(e) => {
-                            e.preventDefault(); // Prevent blur
+                            e.preventDefault(); 
                             onChange(opt);
                             setIsOpen(false);
                         }}
@@ -194,14 +184,13 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
     );
   };
 
-  // --- Helper Logic ---
   const getAvailableBooks = (batch: any) => {
     if (batch.remainingBooks !== undefined) return batch.remainingBooks;
     if (batch.status === 'Fully Distributed') return 0;
     if (batch.status === 'In Stock') return batch.totalBooks;
     return Math.floor(batch.totalBooks * 0.6);
   };
-
+  
   const generateBookGrid = (item: any) => {
     if (item.bookChips && item.bookChips.length > 0) {
         return item.bookChips.map((num: string) => ({ number: num, status: 'Distributed' })); 
@@ -222,8 +211,6 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
     }
     return books;
   };
-
-  // --- Handlers ---
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -272,33 +259,22 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
   const handleRemoveBook = (bookToRemove: string) => {
     setBookChips(prev => prev.filter(b => b !== bookToRemove));
   };
-
+  
   const handleBatchInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setBatchFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // --- Edit Logic Handlers ---
-
   const handleEditDistribution = (item: any) => {
     setEditingDistributionId(item.id);
     
     const addrParts = (item.address || '').split(',').map((s: string) => s.trim());
-    // Parse Address: Try to detect if it has 4 parts (Center, Town, Dist, State) or 3
-    let center = '';
-    let town = '';
-    let district = '';
-    let state = '';
+    let center = '', town = '', district = '', state = '';
 
     if (addrParts.length >= 4) {
-        center = addrParts[0];
-        town = addrParts[1];
-        district = addrParts[2];
-        state = addrParts[3];
+        center = addrParts[0]; town = addrParts[1]; district = addrParts[2]; state = addrParts[3];
     } else {
-        town = addrParts[0] || '';
-        district = addrParts[1] || '';
-        state = addrParts[2] || '';
+        town = addrParts[0] || ''; district = addrParts[1] || ''; state = addrParts[2] || '';
     }
 
     setLocation({ state, district, town, center });
@@ -323,8 +299,6 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
     });
     setFormError(null);
     if (item.batchName) {
-       // Note: batchesList might not be loaded yet if this runs immediately on mount,
-       // but useEffect dependency on batchesList handles recalculation if needed.
        const batch = batchesList.find(b => b.batchName === item.batchName);
        if (batch) setSelectedBatchAvailable(getAvailableBooks(batch));
     }
@@ -342,42 +316,31 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
     });
   };
 
-  // --- Submit Handlers ---
-
   const handleDistribute = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
     
     const countToDistribute = bookChips.length;
-
     if (countToDistribute === 0) {
         setFormError("Please assign at least one book.");
         return;
     }
 
-    if (!editingDistributionId && formData.batchNumber) {
-        if (selectedBatchAvailable !== null) {
-             if (selectedBatchAvailable === 0) {
-                 setFormError("The selected batch is Out of Books.");
-                 return;
-             }
-             if (countToDistribute > selectedBatchAvailable) {
-                setFormError(`The batch is Out of Books (Available: ${selectedBatchAvailable})`);
-                return;
-             }
+    if (!editingDistributionId && formData.batchNumber && selectedBatchAvailable !== null) {
+        if (selectedBatchAvailable === 0 || countToDistribute > selectedBatchAvailable) {
+            setFormError(`The batch is Out of Books (Available: ${selectedBatchAvailable})`);
+            return;
         }
     }
 
-    // Construct final address string
     const finalAddress = `${location.center ? location.center + ', ' : ''}${location.town}, ${location.district}, ${location.state}`;
-    
     const sortedChips = [...bookChips].sort();
     const rangeString = sortedChips.length > 0 
         ? (sortedChips.length > 1 ? `${sortedChips[0]} - ${sortedChips[sortedChips.length-1]}` : sortedChips[0])
         : '-';
 
     const distributionPayload = {
-        id: editingDistributionId, // Null for new
+        id: editingDistributionId, 
         date: formData.date,
         name: formData.recipientName,
         phone: formData.phone,
@@ -392,7 +355,8 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
         registeredCount: 0,
         submittedCount: 0
     };
-
+    
+    // Batch Stock Update
     if (!editingDistributionId && formData.batchNumber) {
         const batchIndex = batchesList.findIndex(b => b.batchName === formData.batchNumber);
         if (batchIndex !== -1) {
@@ -409,17 +373,22 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
 
     await api.saveDistribution(distributionPayload);
     
-    if (isModal && onSuccess) {
-        onSuccess();
-        return;
+    if (isModal && onSuccess) { onSuccess(); return; }
+
+    setToastMessage(editingDistributionId ? "Distribution Updated!" : "Distribution Added Successfully!");
+    setShowToast(true);
+    
+    // Reset Form for next entry
+    if (!editingDistributionId) {
+       setFormData(initialFormData);
+       setBookChips([]);
+       setLocation({ state: '', district: '', town: '', center: '' });
     }
 
-    setToastMessage(editingDistributionId ? "Distribution Updated!" : "Distribution Added!");
-    setShowToast(true);
     setTimeout(() => {
         setShowToast(false);
-        navigate('/distribution'); // Go to info page after success
-    }, 1500);
+        // Navigate back or stay based on workflow. Let's stay to allow multiple entries easily.
+    }, 3000);
   };
 
   const handleBatchSubmit = async (e: React.FormEvent) => {
@@ -428,30 +397,27 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
     if (!editingBatchId) payload.remainingBooks = payload.totalBooks;
     await api.saveBatch(payload);
     
-    if (isModal && onSuccess) {
-        onSuccess();
-        return;
+    if (isModal && onSuccess) { onSuccess(); return; }
+
+    setToastMessage("Batch Saved Successfully!"); 
+    setShowToast(true); 
+    
+    if (!editingBatchId) {
+        setBatchFormData(initialBatchFormData);
     }
 
-    setToastMessage("Batch Saved!"); 
-    setShowToast(true); 
     setTimeout(() => {
         setShowToast(false);
-        navigate('/distribution'); // Go to info page (Batches tab) after success
-    }, 1500);
+    }, 3000);
   };
 
   const handleCancel = () => {
-    if (isModal && onClose) {
-        onClose();
-        return;
-    }
+    if (isModal && onClose) { onClose(); return; }
     navigate('/distribution');
   };
 
   return (
     <div className={`space-y-6 relative h-full flex flex-col ${isModal ? '' : ''}`}>
-      
       {/* Toast Notification */}
       {showToast && (
         <div className="fixed top-6 right-6 z-[100] animate-in fade-in slide-in-from-top-5 duration-500 ease-in-out">
@@ -465,53 +431,30 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
 
       {!isModal && (
         <>
-            {/* Header & Tabs */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
                 <div><h2 className="text-2xl font-bold text-slate-800">Add Distribution</h2><p className="text-slate-500 text-sm mt-1">Create new distributions or print batches.</p></div>
-                
-                {/* Top Layer Filter */}
                 <div className="w-full md:w-auto bg-indigo-50 p-2 rounded-lg border border-indigo-100">
                     <label className="block text-[10px] font-bold text-indigo-400 uppercase mb-1 ml-1">Event Context</label>
                     <div className="relative">
-                        <select 
-                            value={selectedYagam}
-                            onChange={(e) => setSelectedYagam(e.target.value)}
-                            className="w-full md:w-64 appearance-none bg-white border border-indigo-200 text-indigo-700 font-bold py-2 pl-4 pr-10 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-sm"
-                        >
-                            {YAGAM_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                        </select>
-                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-indigo-600">
-                            <ArrowUpDown size={14} />
-                        </div>
+                        <select value={selectedYagam} onChange={(e) => setSelectedYagam(e.target.value)} className="w-full md:w-64 appearance-none bg-white border border-indigo-200 text-indigo-700 font-bold py-2 pl-4 pr-10 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-sm">{YAGAM_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select>
+                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-indigo-600"><ArrowUpDown size={14} /></div>
                     </div>
                 </div>
             </div>
             <div className="border-b border-slate-200 shrink-0">
                 <nav className="-mb-px flex space-x-8">
-                    <button onClick={() => setActiveTab('new_distribution')} className={`${activeTab === 'new_distribution' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}>
-                        <Plus className="mr-2 h-4 w-4" /> New Distribution
-                    </button>
-                    {canManageBatches && (
-                        <button onClick={() => setActiveTab('create_batch')} className={`${activeTab === 'create_batch' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}>
-                            <Printer className="mr-2 h-4 w-4" /> Create Print Batch
-                        </button>
-                    )}
+                    <button onClick={() => setActiveTab('new_distribution')} className={`${activeTab === 'new_distribution' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}><Plus className="mr-2 h-4 w-4" /> New Distribution</button>
+                    {canManageBatches && <button onClick={() => setActiveTab('create_batch')} className={`${activeTab === 'create_batch' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}><Printer className="mr-2 h-4 w-4" /> Create Print Batch</button>}
                 </nav>
             </div>
         </>
       )}
 
-      {/* Main Content Area */}
       <div className={`flex-1 relative ${!isModal ? 'mt-4' : ''}`}>
-        
-        {/* TAB: New Distribution (Form) */}
         {activeTab === 'new_distribution' && (
             <div className={`bg-white rounded-lg shadow-sm border border-slate-200 p-6 ${!isModal ? 'max-w-5xl mx-auto' : ''} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
                 <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
-                   <div>
-                       <h3 className="text-xl font-bold text-slate-800">{editingDistributionId ? 'Edit Distribution' : 'New Distribution'}</h3>
-                       <p className="text-sm text-slate-500">Assign books to an individual or center.</p>
-                   </div>
+                   <div><h3 className="text-xl font-bold text-slate-800">{editingDistributionId ? 'Edit Distribution' : 'New Distribution'}</h3><p className="text-sm text-slate-500">Assign books to an individual or center.</p></div>
                    <button onClick={handleCancel} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-full transition-colors"><X size={20} /></button>
                 </div>
                 
@@ -530,37 +473,10 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
                               
                               <div className="space-y-3 pt-2 border-t border-slate-100 mt-2">
                                   <h5 className="text-xs font-bold text-slate-500 uppercase">Location</h5>
-                                  <SearchableSelect 
-                                      label="State"
-                                      value={location.state}
-                                      options={Object.keys(LOCATION_DATA)}
-                                      onChange={(val) => setLocation({ state: val, district: '', town: '', center: '' })}
-                                      placeholder="Select State"
-                                  />
-                                  <SearchableSelect 
-                                      label="District"
-                                      value={location.district}
-                                      options={location.state ? Object.keys(LOCATION_DATA[location.state] || {}) : []}
-                                      onChange={(val) => setLocation(prev => ({ ...prev, district: val, town: '', center: '' }))}
-                                      placeholder="Select District"
-                                      disabled={!location.state}
-                                  />
-                                  <SearchableSelect 
-                                      label="Town / Mandal"
-                                      value={location.town}
-                                      options={location.district ? (LOCATION_DATA[location.state]?.[location.district] || []) : []}
-                                      onChange={(val) => setLocation(prev => ({ ...prev, town: val, center: '' }))}
-                                      placeholder="Select Town"
-                                      disabled={!location.district}
-                                  />
-                                  <SearchableSelect 
-                                      label="Center"
-                                      value={location.center}
-                                      options={getCentersForTown(location.town)}
-                                      onChange={(val) => setLocation(prev => ({ ...prev, center: val }))}
-                                      placeholder="Select Center"
-                                      disabled={!location.town}
-                                  />
+                                  <SearchableSelect label="State" value={location.state} options={Object.keys(locationData)} onChange={(val) => setLocation({ state: val, district: '', town: '', center: '' })} placeholder="Select State" />
+                                  <SearchableSelect label="District" value={location.district} options={location.state ? Object.keys(locationData[location.state] || {}) : []} onChange={(val) => setLocation(prev => ({ ...prev, district: val, town: '', center: '' }))} placeholder="Select District" disabled={!location.state} />
+                                  <SearchableSelect label="Town / Mandal" value={location.town} options={location.district ? (Object.keys(locationData[location.state]?.[location.district] || {})) : []} onChange={(val) => setLocation(prev => ({ ...prev, town: val, center: '' }))} placeholder="Select Town" disabled={!location.district} />
+                                  <SearchableSelect label="Center" value={location.center} options={location.town ? (locationData[location.state]?.[location.district]?.[location.town] || []) : []} onChange={(val) => setLocation(prev => ({ ...prev, center: val }))} placeholder="Select Center" disabled={!location.town} />
                               </div>
                            </div>
                         </div>
@@ -571,70 +487,47 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
                            <div className="p-5 space-y-4 flex-1">
                               <div>
                                  <label className="block text-sm font-medium text-slate-700 mb-1">Batch Number</label>
-                                 <div className="relative">
-                                    <select name="batchNumber" value={formData.batchNumber} onChange={handleInputChange} className="block w-full pl-3 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm bg-white">
-                                       <option value="">Select Batch</option>
-                                       {batchesList.map(batch => <option key={batch.id} value={batch.batchName}>{batch.batchName} ({getAvailableBooks(batch)} Avail)</option>)}
-                                    </select>
-                                 </div>
+                                 <select name="batchNumber" value={formData.batchNumber} onChange={handleInputChange} className="block w-full pl-3 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-sm bg-white">
+                                    <option value="">Select Batch</option>
+                                    {batchesList.map(batch => <option key={batch.id} value={batch.batchName}>{batch.batchName} ({getAvailableBooks(batch)} Avail)</option>)}
+                                 </select>
                                  {selectedBatchAvailable !== null && <p className="text-xs text-emerald-600 mt-1 font-medium">Available Books: {selectedBatchAvailable}</p>}
                               </div>
                               
                               <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
                                   <h5 className="text-xs font-bold text-slate-700 uppercase">Add Books</h5>
                                   <div className="flex gap-2 items-end">
-                                      <div className="flex-1">
-                                          <label className="text-[10px] text-slate-500 block mb-1">Start Serial</label>
-                                          <input type="text" value={tempSerial.start} onChange={e => setTempSerial({...tempSerial, start: e.target.value})} className="w-full text-xs p-1.5 border rounded font-mono" />
-                                      </div>
-                                      <div className="flex-1">
-                                          <label className="text-[10px] text-slate-500 block mb-1">End Serial</label>
-                                          <input type="text" value={tempSerial.end} onChange={e => setTempSerial({...tempSerial, end: e.target.value})} className="w-full text-xs p-1.5 border rounded font-mono" />
-                                      </div>
+                                      <div className="flex-1"><label className="text-[10px] text-slate-500 block mb-1">Start Serial</label><input type="text" value={tempSerial.start} onChange={e => setTempSerial({...tempSerial, start: e.target.value})} className="w-full text-xs p-1.5 border rounded font-mono" /></div>
+                                      <div className="flex-1"><label className="text-[10px] text-slate-500 block mb-1">End Serial</label><input type="text" value={tempSerial.end} onChange={e => setTempSerial({...tempSerial, end: e.target.value})} className="w-full text-xs p-1.5 border rounded font-mono" /></div>
                                       <button type="button" onClick={handleAddBookRange} className="bg-indigo-600 text-white p-1.5 rounded hover:bg-indigo-700"><Plus size={16} /></button>
                                   </div>
                                   <div className="flex gap-2 items-end border-t border-slate-200 pt-2">
-                                      <div className="flex-1">
-                                          <label className="text-[10px] text-slate-500 block mb-1">Single Book #</label>
-                                          <input type="text" value={tempSerial.single} onChange={e => setTempSerial({...tempSerial, single: e.target.value})} className="w-full text-xs p-1.5 border rounded font-mono" />
-                                      </div>
+                                      <div className="flex-1"><label className="text-[10px] text-slate-500 block mb-1">Single Book #</label><input type="text" value={tempSerial.single} onChange={e => setTempSerial({...tempSerial, single: e.target.value})} className="w-full text-xs p-1.5 border rounded font-mono" /></div>
                                       <button type="button" onClick={handleAddSingleBook} className="bg-indigo-600 text-white p-1.5 rounded hover:bg-indigo-700"><Plus size={16} /></button>
                                   </div>
                               </div>
 
                               <div className="min-h-[60px] p-2 border border-slate-200 rounded-lg bg-slate-50">
                                   <p className="text-xs text-slate-500 mb-2">Selected Books ({bookChips.length})</p>
-                                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar">
                                       {bookChips.length === 0 && <span className="text-xs text-slate-400 italic">No books added</span>}
-                                      {bookChips.map(book => (
-                                          <span key={book} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-white border border-slate-300 text-slate-700 shadow-sm font-mono">
-                                              {book}
-                                              <button type="button" onClick={() => handleRemoveBook(book)} className="ml-1 text-slate-400 hover:text-red-500"><X size={12} /></button>
-                                          </span>
-                                      ))}
+                                      {bookChips.map(book => (<span key={book} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-white border border-slate-300 text-slate-700 shadow-sm font-mono">{book}<button type="button" onClick={() => handleRemoveBook(book)} className="ml-1 text-slate-400 hover:text-red-500"><X size={12} /></button></span>))}
                                   </div>
                               </div>
 
-                              <div>
-                                  <label className="block text-sm font-medium text-slate-700 mb-1">Total Count</label>
-                                  <input type="text" readOnly value={bookChips.length} className="block w-full px-3 py-2 border border-slate-200 bg-slate-100 rounded-lg text-slate-500 font-bold" />
-                              </div>
-
+                              <div><label className="block text-sm font-medium text-slate-700 mb-1">Total Count</label><input type="text" readOnly value={bookChips.length} className="block w-full px-3 py-2 border border-slate-200 bg-slate-100 rounded-lg text-slate-500 font-bold" /></div>
                               {formError && <div className="bg-red-50 border border-red-200 rounded-md p-3 flex items-start"><AlertTriangle size={16} className="text-red-500 mt-0.5 mr-2 shrink-0" /><p className="text-sm text-red-700 font-medium">{formError}</p></div>}
                            </div>
                         </div>
                      </div>
                      <div className="px-6 py-4 border-t border-slate-100 bg-white rounded-b-xl shrink-0 flex justify-end gap-3 mt-4">
                         <button type="button" onClick={handleCancel} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium text-sm shadow-sm">Cancel</button>
-                        <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-sm transition-colors font-medium text-sm">
-                            {editingDistributionId ? 'Update Distribution' : 'Add Distribution'}
-                        </button>
+                        <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-sm transition-colors font-medium text-sm">{editingDistributionId ? 'Update Distribution' : 'Add Distribution'}</button>
                      </div>
                   </form>
             </div>
         )}
-
-        {/* TAB: Create Batch (Form) */}
+        
         {activeTab === 'create_batch' && (
             <div className={`bg-white rounded-lg shadow-sm border border-slate-200 p-6 ${!isModal ? 'max-w-2xl mx-auto' : ''} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
                 <div className="flex justify-between items-center mb-6">
@@ -654,9 +547,7 @@ const AddDistribution: React.FC<AddDistributionProps> = ({
                    <div><label className="block text-sm font-medium text-slate-700">Status</label><select name="status" value={batchFormData.status} onChange={handleBatchInputChange} className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 bg-white"><option value="In Stock">In Stock</option><option value="Partially Distributed">Partially Distributed</option><option value="Fully Distributed">Fully Distributed</option></select></div>
                    <div className="pt-4 flex justify-end gap-3">
                        <button type="button" onClick={handleCancel} className="px-4 py-2 border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50">Cancel</button>
-                       <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">
-                         {editingBatchId ? 'Update Batch' : 'Add Batch'}
-                       </button>
+                       <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">{editingBatchId ? 'Update Batch' : 'Add Batch'}</button>
                    </div>
                 </form>
             </div>

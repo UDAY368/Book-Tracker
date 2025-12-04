@@ -1,4 +1,5 @@
 
+
 import { KPI, RegionStat, TreeData, PendingUser, DistributorStats, PrintBatch, InchargeStats, ReceiverBook, BookPage } from '../types';
 
 export const getMockKPIs = (): KPI[] => [
@@ -24,6 +25,7 @@ export const getDistributorStats = (): DistributorStats => ({
   printedNotDistributed: 0,
   distributedNotRegistered: 0,
   registeredNotReceived: 0,
+  donorUpdated: 0
 });
 
 export const getInchargeStats = (): InchargeStats => ({

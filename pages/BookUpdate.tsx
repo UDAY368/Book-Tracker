@@ -1,265 +1,520 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Search, CheckCircle, AlertCircle, 
   Save, X, Loader2, ChevronLeft, ChevronRight,
-  FileSpreadsheet, Upload, Download, RefreshCw, AlertTriangle,
-  BookOpen, Calendar, User, FileText, IndianRupee, CreditCard,
-  Filter, ArrowUpDown, Phone, Book
+  Book, Calendar, User, Phone, 
+  ArrowRight, CreditCard, Banknote, IndianRupee, RefreshCw, Hash, FileText
 } from 'lucide-react';
 import { api } from '../services/api';
-import { ReceiverBook, BookPage } from '../types';
+import { ReceiverBook } from '../types';
 
-const LOCATION_DATA: Record<string, Record<string, string[]>> = {};
-
-const YAGAM_OPTIONS = [
-  "Dhyana Maha Yagam - 1", 
-  "Dhyana Maha Yagam - 2", 
-  "Dhyana Maha Yagam - 3", 
-  "Dhyana Maha Yagam - 4"
-];
-
-const getCentersForTown = (town: string) => {
-    return [];
-};
-
-// ... (Rest of component logic remains the same, just removing mock data)
-
-const FilterSelect = ({ 
-  label, 
-  value, 
-  onChange, 
-  options, 
-  disabled = false 
-}: { 
-  label: string, 
-  value: string, 
-  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void, 
-  options: string[], 
-  disabled?: boolean 
-}) => (
-  <div className="flex-1 min-w-[140px]">
-    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">{label}</label>
-    <div className="relative">
-      <select 
-        value={value}
-        onChange={onChange}
-        disabled={disabled}
-        className="block w-full pl-3 pr-8 py-2 text-sm border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer appearance-none border shadow-sm"
-      >
-        <option value="">All {label}s</option>
-        {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-      </select>
-      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-        <ArrowUpDown size={12} />
-      </div>
-    </div>
-  </div>
-);
-
-const PaginationControls = ({ 
-    currentPage, 
-    totalPages, 
-    onPageChange,
-    totalItems,
-    startIndex,
-    endIndex
-}: { 
-    currentPage: number, 
-    totalPages: number, 
-    onPageChange: (p: number) => void,
-    totalItems: number,
-    startIndex: number,
-    endIndex: number
-}) => {
-    if (totalItems === 0) return null;
-    // Simple pagination render
-    return (
-        <div className="flex justify-between items-center py-4 px-6 bg-white border-t border-slate-200">
-             <div className="text-sm text-slate-600">
-                Showing {Math.min(startIndex + 1, totalItems)} to {Math.min(endIndex, totalItems)} of {totalItems}
-             </div>
-             <div className="flex gap-1">
-                <button onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1} className="p-1 border rounded disabled:opacity-50"><ChevronLeft size={16}/></button>
-                <button onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages} className="p-1 border rounded disabled:opacity-50"><ChevronRight size={16}/></button>
-             </div>
-        </div>
-    );
-};
-
-const BookUpdate: React.FC = () => {
-  const [selectedYagam, setSelectedYagam] = useState("Dhyana Maha Yagam - 4");
-  const [activeTab, setActiveTab] = useState<'submit' | 'registered' | 'submitted' | 'bulk'>('submit');
-  const [books, setBooks] = useState<any[]>([]);
+const BookSubmit: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
+  const [books, setBooks] = useState<ReceiverBook[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterLocation, setFilterLocation] = useState({ state: '', district: '', town: '', center: '' });
-  
-  // Submit Tab States
-  const [validationInput, setValidationInput] = useState('');
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [validatedBook, setValidatedBook] = useState<ReceiverBook | null>(null);
-  const [submitForm, setSubmitForm] = useState({
-     submissionDate: new Date().toISOString().split('T')[0],
-     pagesFilled: 0,
-     paymentMode: 'Offline' as 'Online'|'Offline',
-     transactionId: '',
-     amount: 0
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // List States
   const [searchQuery, setSearchQuery] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-  const [selectedBookDetail, setSelectedBookDetail] = useState<any>(null);
-
-  // Bulk States
-  const [bulkFile, setBulkFile] = useState<File | null>(null);
-  const [bulkStep, setBulkStep] = useState<'idle' | 'validating' | 'report' | 'success'>('idle');
-  const [bulkReport, setBulkReport] = useState<any[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Submit/Update Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedBook, setSelectedBook] = useState<ReceiverBook | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Toast State
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
+  // Form State
+  const [formData, setFormData] = useState({
+     submissionDate: new Date().toISOString().split('T')[0],
+     pagesFilled: '', // Keep as string for input handling, convert to number on submit
+     paymentMode: 'Offline' as 'Online' | 'Offline' | 'Check',
+     transactionId: '',
+     checkNumber: '',
+     amount: '' // Keep as string for input handling
+  });
+
   useEffect(() => {
     loadBooks();
-  }, [selectedYagam]);
+  }, []);
 
   const loadBooks = async () => {
     setLoading(true);
-    const data = await api.getReceiverBooks();
-    setBooks(data);
-    setLoading(false);
+    try {
+      const data = await api.getReceiverBooks();
+      setBooks(data);
+    } catch (e) {
+      console.error("Failed to load books", e);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  // Filter Logic
+  const filteredBooks = books.filter(book => {
+      const matchesSearch = 
+          book.bookNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (book.assignedToName && book.assignedToName.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      if (activeTab === 'pending') {
+          // In Book Receiver context, 'Registered' status implies it is with the receiver and pending submission
+          return matchesSearch && (book.status === 'Registered');
+      } else {
+          return matchesSearch && (book.status === 'Received');
+      }
+  });
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const totalItems = filteredBooks.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const paginatedBooks = filteredBooks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   useEffect(() => {
-      setCurrentPage(1);
-  }, [activeTab, searchQuery, filterLocation]);
+    setCurrentPage(1);
+  }, [activeTab, searchQuery]);
 
-  const handleValidateBook = () => {
-      setValidationError(null);
-      setValidatedBook(null);
-      const book = books.find(b => b.bookNumber.toLowerCase() === validationInput.trim().toLowerCase());
-      if (!book) { setValidationError("Book number not found."); return; }
-      if (book.status === 'Received') { setValidationError("Book already submitted."); return; }
-      setValidatedBook(book);
+  // Handlers
+  const openSubmitModal = (book: ReceiverBook) => {
+      setSelectedBook(book);
+      // Pre-fill existing data if updating, or defaults if new submission
+      setFormData({
+         submissionDate: book.receivedDate ? book.receivedDate.split('T')[0] : new Date().toISOString().split('T')[0],
+         pagesFilled: book.filledPages ? String(book.filledPages) : '',
+         paymentMode: book.paymentMode || 'Offline',
+         transactionId: book.transactionId || '',
+         checkNumber: book.checkNumber || '',
+         amount: book.totalAmount ? String(book.totalAmount) : ''
+      });
+      setIsModalOpen(true);
   };
 
-  const handleSingleSubmit = async (e: React.FormEvent) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      const { name, value } = e.target;
+      setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!validatedBook) return;
+      if (!selectedBook) return;
+
       setIsSubmitting(true);
-      await api.submitBook(validatedBook.bookNumber, submitForm);
-      await loadBooks();
-      setToastMessage("Book Submitted Successfully!");
-      setShowToast(true);
-      setTimeout(() => setShowToast(false), 3000);
-      setIsSubmitting(false);
-      setValidatedBook(null);
-      setValidationInput('');
+      try {
+          await api.submitBook(selectedBook.bookNumber, {
+              submissionDate: formData.submissionDate,
+              pagesFilled: Number(formData.pagesFilled),
+              amount: Number(formData.amount),
+              paymentMode: formData.paymentMode,
+              transactionId: formData.transactionId,
+              checkNumber: formData.checkNumber
+          });
+
+          setToastMessage(activeTab === 'pending' ? 'Book Submitted Successfully!' : 'Submission Updated Successfully!');
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 3000);
+          
+          await loadBooks(); 
+          setIsModalOpen(false);
+      } catch (error) {
+          alert("Failed to submit book");
+      } finally {
+          setIsSubmitting(false);
+      }
   };
 
-  // ... (Keeping rest of component structure identical but removing hardcoded lists/logic if any)
-
-  const registeredCount = books.filter(b => b.status === 'Registered').length;
-  const submittedCount = books.filter(b => b.status === 'Received').length;
-
-  const renderBookTable = (status: 'Registered' | 'Received') => {
-      const filtered = books.filter(b => b.status === status && b.bookNumber.includes(searchQuery));
-      const totalItems = filtered.length;
-      const totalPages = Math.ceil(totalItems / itemsPerPage);
-      const startIndex = (currentPage - 1) * itemsPerPage;
-      const paginatedData = filtered.slice(startIndex, startIndex + itemsPerPage);
-
-      return (
-        <div className="flex flex-col space-y-4">
-            <div className="bg-white rounded-lg border border-slate-200 flex flex-col shadow-sm">
-                <div className="overflow-x-auto min-h-[200px]">
-                    <table className="min-w-full divide-y divide-slate-200">
-                        <thead className="bg-slate-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Book Number</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Name</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-slate-200">
-                            {paginatedData.length === 0 ? (
-                                <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-400">No data.</td></tr>
-                            ) : (
-                                paginatedData.map((book) => (
-                                    <tr key={book.id}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{new Date(book.assignedDate).toLocaleDateString()}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-600">{book.bookNumber}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{book.assignedToName}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium"><button onClick={() => setSelectedBookDetail(book)} className="text-indigo-600">View</button></td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-                <PaginationControls currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} totalItems={totalItems} startIndex={startIndex} endIndex={startIndex + paginatedData.length} />
-            </div>
-        </div>
-      );
+  // Stats Calculation
+  // Total Assigned = All books that reached the receiver (Registered + Received)
+  // Pending = Registered
+  // Submitted = Received
+  const stats = {
+      totalAssigned: books.filter(b => b.status === 'Registered' || b.status === 'Received').length,
+      pending: books.filter(b => b.status === 'Registered').length,
+      submitted: books.filter(b => b.status === 'Received').length
   };
 
-  if (loading) return <div className="p-8 text-center text-slate-400">Loading...</div>;
+  const completionRate = stats.totalAssigned > 0 ? Math.round((stats.submitted / stats.totalAssigned) * 100) : 0;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-20">
-      {showToast && (
-        <div className="fixed top-6 right-6 z-[100] bg-emerald-50 text-emerald-800 px-6 py-4 rounded-xl shadow-lg border border-emerald-200">
-            Success: {toastMessage}
+    <div className="space-y-6 max-w-7xl mx-auto pb-20 animate-in fade-in duration-500 relative">
+       
+       {/* Toast Notification */}
+       {showToast && (
+        <div className="fixed top-6 right-6 z-[100] animate-in slide-in-from-right duration-300">
+          <div className="bg-emerald-50 text-emerald-800 px-6 py-4 rounded-xl shadow-lg shadow-emerald-500/10 flex items-center gap-3 border border-emerald-200 ring-1 ring-emerald-100">
+            <div className="bg-white p-1.5 rounded-full shadow-sm text-emerald-600"><CheckCircle className="h-5 w-5" /></div>
+            <div><h4 className="font-bold text-sm text-emerald-900">Success</h4><p className="text-xs text-emerald-700">{toastMessage}</p></div>
+            <button onClick={() => setShowToast(false)} className="ml-4 text-emerald-400 hover:text-emerald-600 transition-colors p-1 hover:bg-emerald-100 rounded-full"><X size={16} /></button>
+          </div>
         </div>
       )}
-      
-      {/* Sidebar Details (Stripped for brevity in this cleanup, assume structure kept) */}
-      {selectedBookDetail && (
-         <div className="fixed inset-0 z-50 flex justify-end">
-            <div className="absolute inset-0 bg-black/30" onClick={() => setSelectedBookDetail(null)}></div>
-            <div className="w-[400px] bg-white h-full shadow-2xl p-6">
-                <h3 className="text-xl font-bold">{selectedBookDetail.bookNumber}</h3>
-                <button onClick={() => setSelectedBookDetail(null)} className="mt-4 text-indigo-600">Close</button>
-            </div>
-         </div>
-      )}
 
-      <div className="flex justify-between items-center gap-4">
-        <h2 className="text-2xl font-bold text-slate-800">Book Submission</h2>
-      </div>
+       {/* Header & Stats Cards */}
+       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+           {/* Progress Card */}
+           <div className="md:col-span-1 bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+               <div>
+                  <h2 className="text-xl font-bold text-slate-800">Book Submit</h2>
+                  <p className="text-sm text-slate-500 mt-1">Manage returns & collections</p>
+               </div>
+               <div className="mt-4 pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-2 mb-1">
+                      <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-500 transition-all duration-1000" style={{ width: `${completionRate}%` }}></div>
+                      </div>
+                      <span className="text-xs font-bold text-slate-600">{completionRate}%</span>
+                  </div>
+                  <p className="text-xs text-slate-400">Submission Rate</p>
+               </div>
+           </div>
+           
+           {/* Total Assigned */}
+           <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100 flex flex-col justify-center">
+               <div className="flex items-center gap-3 mb-2">
+                   <div className="p-2 bg-white rounded-lg text-indigo-600 shadow-sm"><Book size={20} /></div>
+                   <span className="text-indigo-900 font-bold text-sm uppercase opacity-70">Total Assigned</span>
+               </div>
+               <span className="text-3xl font-bold text-indigo-900">{stats.totalAssigned}</span>
+           </div>
 
-      <div className="border-b border-slate-200">
-          <nav className="-mb-px flex space-x-8">
-            <button onClick={() => setActiveTab('submit')} className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'submit' ? 'border-indigo-500 text-indigo-600' : 'border-transparent'}`}>Submit Book</button>
-            <button onClick={() => setActiveTab('registered')} className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'registered' ? 'border-indigo-500 text-indigo-600' : 'border-transparent'}`}>Pending ({registeredCount})</button>
-            <button onClick={() => setActiveTab('submitted')} className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'submitted' ? 'border-indigo-500 text-indigo-600' : 'border-transparent'}`}>Submitted ({submittedCount})</button>
-          </nav>
-      </div>
+           {/* Pending Submission */}
+           <div className="bg-amber-50 p-6 rounded-xl border border-amber-100 flex flex-col justify-center">
+               <div className="flex items-center gap-3 mb-2">
+                   <div className="p-2 bg-white rounded-lg text-amber-600 shadow-sm"><AlertCircle size={20} /></div>
+                   <span className="text-amber-900 font-bold text-sm uppercase opacity-70">Pending Submit</span>
+               </div>
+               <span className="text-3xl font-bold text-amber-900">{stats.pending}</span>
+           </div>
+       </div>
 
-      <div className="mt-4">
-        {activeTab === 'submit' && (
-            <div className="max-w-2xl mx-auto bg-white rounded-lg border p-8">
-                <div className="flex gap-2 mb-6">
-                    <input type="text" value={validationInput} onChange={(e) => { setValidationInput(e.target.value.toUpperCase()); setValidationError(null); setValidatedBook(null); }} placeholder="Enter Book Number" className="flex-1 px-4 py-3 border rounded-lg" />
-                    <button onClick={handleValidateBook} className="bg-slate-900 text-white px-6 py-3 rounded-lg">Validate</button>
-                </div>
-                {validationError && <div className="text-red-600 mb-4">{validationError}</div>}
-                {validatedBook && (
-                    <form onSubmit={handleSingleSubmit} className="space-y-4">
-                        <div className="font-bold text-lg">{validatedBook.bookNumber}</div>
-                        <input type="number" required placeholder="Amount" value={submitForm.amount} onChange={(e) => setSubmitForm({...submitForm, amount: parseInt(e.target.value)})} className="w-full p-2 border rounded" />
-                        <button type="submit" disabled={isSubmitting} className="w-full bg-indigo-600 text-white py-3 rounded-lg">Confirm</button>
-                    </form>
-                )}
-            </div>
-        )}
-        {(activeTab === 'registered' || activeTab === 'submitted') && renderBookTable(activeTab === 'registered' ? 'Registered' : 'Received')}
-      </div>
+       {/* Main Content Area */}
+       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col min-h-[600px]">
+           
+           {/* Tabs */}
+           <div className="flex border-b border-slate-200">
+               <button 
+                  onClick={() => setActiveTab('pending')}
+                  className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors border-b-2 ${activeTab === 'pending' ? 'border-amber-500 text-amber-700 bg-amber-50/20' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+               >
+                  <AlertCircle size={16} /> Pending Submission
+                  <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs ml-1">{stats.pending}</span>
+               </button>
+               <button 
+                  onClick={() => setActiveTab('history')}
+                  className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors border-b-2 ${activeTab === 'history' ? 'border-emerald-500 text-emerald-700 bg-emerald-50/20' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+               >
+                  <CheckCircle size={16} /> Submission History
+                  <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs ml-1">{stats.submitted}</span>
+               </button>
+           </div>
+
+           {/* Toolbar */}
+           <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
+               <div className="relative w-full max-w-md">
+                   <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                   <input 
+                      type="text" 
+                      placeholder="Search Book Number or Recipient Name..." 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9 pr-4 py-2 w-full border border-slate-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                   />
+               </div>
+               <button onClick={loadBooks} className="p-2 text-slate-500 hover:text-indigo-600 bg-white border border-slate-200 rounded-lg shadow-sm hover:shadow transition-all" title="Refresh Data">
+                   <RefreshCw size={18} />
+               </button>
+           </div>
+
+           {/* Table */}
+           <div className="flex-1 overflow-auto">
+               {loading ? (
+                   <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+                       <Loader2 className="animate-spin mb-2" size={32} />
+                       <span className="text-sm">Loading Books...</span>
+                   </div>
+               ) : (
+                   <table className="min-w-full divide-y divide-slate-200">
+                       <thead className="bg-slate-50 sticky top-0 z-10">
+                           <tr>
+                               <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Book Number</th>
+                               <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Recipient Name</th>
+                               <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Phone Number</th>
+                               {activeTab === 'history' && (
+                                   <>
+                                       <th className="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Total Donors</th>
+                                       <th className="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Donation Amount</th>
+                                   </>
+                               )}
+                               <th className="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Action</th>
+                           </tr>
+                       </thead>
+                       <tbody className="bg-white divide-y divide-slate-100">
+                           {paginatedBooks.length === 0 ? (
+                               <tr><td colSpan={activeTab === 'history' ? 6 : 4} className="px-6 py-12 text-center text-slate-400 italic">No books found in this category.</td></tr>
+                           ) : (
+                               paginatedBooks.map((book, idx) => (
+                                   <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                       <td className="px-6 py-4 whitespace-nowrap">
+                                           <div className="flex items-center gap-2">
+                                               <Book size={16} className="text-slate-400" />
+                                               <span className="font-bold font-mono text-indigo-600">{book.bookNumber}</span>
+                                           </div>
+                                       </td>
+                                       <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className="text-sm font-bold text-slate-800">{book.assignedToName}</span>
+                                       </td>
+                                       <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center gap-2 text-slate-600">
+                                                <Phone size={14} className="text-slate-400" />
+                                                <span className="text-sm font-medium">{book.assignedToPhone || '-'}</span>
+                                            </div>
+                                       </td>
+                                       {activeTab === 'history' && (
+                                           <>
+                                               <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                   <span className="text-sm font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">{book.filledPages}/20</span>
+                                               </td>
+                                               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-emerald-600">
+                                                   ₹{book.totalAmount.toLocaleString()}
+                                               </td>
+                                           </>
+                                       )}
+                                       <td className="px-6 py-4 whitespace-nowrap text-right">
+                                           {activeTab === 'pending' ? (
+                                               <button 
+                                                  onClick={() => openSubmitModal(book)}
+                                                  className="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 shadow-sm shadow-indigo-200 transition-all"
+                                               >
+                                                   Submit <ArrowRight size={12} className="ml-1" />
+                                               </button>
+                                           ) : (
+                                               <button 
+                                                  onClick={() => openSubmitModal(book)}
+                                                  className="inline-flex items-center px-3 py-1.5 bg-white text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-50 border border-slate-200 transition-all"
+                                               >
+                                                   Update Info
+                                               </button>
+                                           )}
+                                       </td>
+                                   </tr>
+                               ))
+                           )}
+                       </tbody>
+                   </table>
+               )}
+           </div>
+
+           {/* Pagination */}
+           {totalItems > 0 && (
+               <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center">
+                   <div className="text-xs text-slate-500">
+                       Page <span className="font-bold">{currentPage}</span> of {totalPages} ({totalItems} items)
+                   </div>
+                   <div className="flex gap-2">
+                       <button 
+                          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                          disabled={currentPage === 1}
+                          className="p-2 bg-white border border-slate-200 rounded-md disabled:opacity-50 hover:bg-slate-100"
+                       >
+                           <ChevronLeft size={16} />
+                       </button>
+                       <button 
+                          onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                          disabled={currentPage === totalPages}
+                          className="p-2 bg-white border border-slate-200 rounded-md disabled:opacity-50 hover:bg-slate-100"
+                       >
+                           <ChevronRight size={16} />
+                       </button>
+                   </div>
+               </div>
+           )}
+       </div>
+
+       {/* Submit/Update Modal */}
+       {isModalOpen && selectedBook && (
+           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+               <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
+               <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+                   {/* Modal Header */}
+                   <div className="bg-indigo-600 p-6 text-white flex justify-between items-start shrink-0">
+                       <div>
+                           <h3 className="text-xl font-bold">{activeTab === 'pending' ? 'Submit Book' : 'Update Submission'}</h3>
+                           <div className="flex items-center gap-2 mt-2 opacity-90">
+                               <Book size={16} />
+                               <span className="font-mono text-lg font-bold bg-indigo-500 px-2 rounded">{selectedBook.bookNumber}</span>
+                           </div>
+                       </div>
+                       <button onClick={() => setIsModalOpen(false)} className="text-indigo-200 hover:text-white bg-indigo-700 hover:bg-indigo-500 p-1.5 rounded-full transition-colors">
+                           <X size={20} />
+                       </button>
+                   </div>
+
+                   {/* Modal Body */}
+                   <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto custom-scrollbar">
+                       
+                       {/* Read-only Information */}
+                       <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
+                           <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2 border-b border-slate-200 pb-2">Recipient Details</h4>
+                           <div className="grid grid-cols-2 gap-4">
+                               <div>
+                                   <label className="text-xs text-slate-500 block">Name</label>
+                                   <p className="text-sm font-bold text-slate-800">{selectedBook.assignedToName}</p>
+                                </div>
+                                <div>
+                                   <label className="text-xs text-slate-500 block">Phone</label>
+                                   <p className="text-sm font-medium text-slate-800">{selectedBook.assignedToPhone}</p>
+                                </div>
+                                <div>
+                                   <label className="text-xs text-slate-500 block">PSSM ID</label>
+                                   <p className="text-sm font-medium text-slate-800">{selectedBook.pssmId || 'N/A'}</p>
+                                </div>
+                                <div>
+                                   <label className="text-xs text-slate-500 block">Address</label>
+                                   <p className="text-sm font-medium text-slate-800 truncate" title={selectedBook.address}>{selectedBook.address || 'N/A'}</p>
+                                </div>
+                           </div>
+                       </div>
+
+                       {/* Input Fields */}
+                       <div>
+                           <label className="block text-sm font-bold text-slate-700 mb-1">Submission Date</label>
+                           <div className="relative">
+                               <Calendar className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                               <input 
+                                  type="date" 
+                                  name="submissionDate"
+                                  required
+                                  value={formData.submissionDate}
+                                  onChange={handleInputChange}
+                                  className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                               />
+                           </div>
+                       </div>
+
+                       <div>
+                           <label className="block text-sm font-bold text-slate-700 mb-1">Total Donors <span className="text-slate-400 font-normal">(Max 20)</span></label>
+                           <div className="flex items-center">
+                               <input 
+                                  type="number" 
+                                  name="pagesFilled"
+                                  required
+                                  min="0"
+                                  max="20"
+                                  value={formData.pagesFilled}
+                                  onChange={handleInputChange}
+                                  className="w-full px-4 py-2 border border-slate-300 rounded-l-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                                  placeholder="0"
+                               />
+                               <span className="bg-slate-100 text-slate-500 px-4 py-2 border border-l-0 border-slate-300 rounded-r-lg font-bold">/ 20</span>
+                           </div>
+                       </div>
+
+                       <div>
+                           <label className="block text-sm font-bold text-slate-700 mb-1">Payment Mode</label>
+                           <div className="grid grid-cols-3 gap-2">
+                               {['Offline', 'Online', 'Check'].map((mode) => (
+                                   <label 
+                                      key={mode}
+                                      className={`
+                                        cursor-pointer text-center py-2 rounded-lg border text-sm font-medium transition-all
+                                        ${formData.paymentMode === mode 
+                                            ? 'bg-indigo-50 border-indigo-500 text-indigo-700 ring-1 ring-indigo-500' 
+                                            : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                                        }
+                                      `}
+                                   >
+                                       <input 
+                                          type="radio" 
+                                          name="paymentMode" 
+                                          value={mode} 
+                                          checked={formData.paymentMode === mode} 
+                                          onChange={handleInputChange}
+                                          className="hidden" 
+                                       />
+                                       {mode === 'Offline' && <Banknote size={16} className="inline mr-1 mb-0.5" />}
+                                       {mode === 'Online' && <CreditCard size={16} className="inline mr-1 mb-0.5" />}
+                                       {mode === 'Check' && <FileText size={16} className="inline mr-1 mb-0.5" />}
+                                       {mode}
+                                   </label>
+                               ))}
+                           </div>
+                       </div>
+
+                       {/* Conditional Fields based on Payment Mode */}
+                       {formData.paymentMode === 'Online' && (
+                           <div className="animate-in fade-in slide-in-from-top-2">
+                               <label className="block text-sm font-bold text-slate-700 mb-1">Transaction ID <span className="text-red-500">*</span></label>
+                               <div className="relative">
+                                    <Hash className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                                    <input 
+                                        type="text" 
+                                        name="transactionId"
+                                        required
+                                        placeholder="Enter UPI / Bank Ref No."
+                                        value={formData.transactionId}
+                                        onChange={handleInputChange}
+                                        className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-indigo-50/30"
+                                    />
+                               </div>
+                           </div>
+                       )}
+
+                       {formData.paymentMode === 'Check' && (
+                           <div className="animate-in fade-in slide-in-from-top-2">
+                               <label className="block text-sm font-bold text-slate-700 mb-1">Check Number <span className="text-red-500">*</span></label>
+                               <div className="relative">
+                                    <Hash className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                                    <input 
+                                        type="text" 
+                                        name="checkNumber"
+                                        required
+                                        placeholder="Enter Check No."
+                                        value={formData.checkNumber}
+                                        onChange={handleInputChange}
+                                        className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-indigo-50/30"
+                                    />
+                               </div>
+                           </div>
+                       )}
+
+                       <div>
+                           <label className="block text-sm font-bold text-slate-700 mb-1">Donation Amount <span className="text-red-500">*</span></label>
+                           <div className="relative">
+                               <IndianRupee className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                               <input 
+                                  type="number" 
+                                  name="amount"
+                                  required
+                                  value={formData.amount}
+                                  onChange={handleInputChange}
+                                  placeholder="0.00"
+                                  className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-bold text-slate-800"
+                               />
+                           </div>
+                       </div>
+
+                       <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-4 shrink-0">
+                           <button 
+                              type="button" 
+                              onClick={() => setIsModalOpen(false)}
+                              className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-bold transition-colors"
+                           >
+                               Cancel
+                           </button>
+                           <button 
+                              type="submit" 
+                              disabled={isSubmitting}
+                              className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 flex items-center"
+                           >
+                               {isSubmitting ? <Loader2 className="animate-spin mr-2" size={18} /> : <Save className="mr-2" size={18} />}
+                               {activeTab === 'pending' ? 'Submit Book' : 'Update Info'}
+                           </button>
+                       </div>
+                   </form>
+               </div>
+           </div>
+       )}
     </div>
   );
 };
 
-export default BookUpdate;
+export default BookSubmit;

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Search, Filter, ChevronLeft, ChevronRight, X, 
@@ -5,6 +6,7 @@ import {
   MapPin, Calendar, Phone, CreditCard, ArrowUpDown, Clock, AlertCircle,
   Loader2, Layers, IndianRupee, Printer
 } from 'lucide-react';
+import { api } from '../services/api';
 
 // --- Types ---
 
@@ -14,13 +16,12 @@ interface BookLifecycleData {
   id: string;
   bookNumber: string;
   status: TrackingStatus;
-  currentHolder: string;
   
   // Phase 1: Distribution
   distributorName: string;
   distributorPhone: string;
   distributionDate: string;
-  distributionAddress: string; // Center, Town, District, State
+  distributionAddress: string; 
 
   // Phase 2: Registration
   recipientName?: string;
@@ -56,7 +57,7 @@ const StatusBadge = ({ status }: { status: TrackingStatus }) => {
     'Donor Updated': 'bg-purple-100 text-purple-700 border-purple-200'
   };
   return (
-    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${styles[status]}`}>
+    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${styles[status] || 'bg-slate-100'}`}>
       {status}
     </span>
   );
@@ -95,7 +96,7 @@ const TimelineItem = ({
       <div className={`transition-opacity duration-300 ${!active && !completed ? 'opacity-50 grayscale' : 'opacity-100'}`}>
         <div className="flex justify-between items-start mb-2">
           <h4 className="text-sm font-bold text-slate-800">{title}</h4>
-          {date && <span className="text-xs text-slate-500 font-mono bg-slate-100 px-2 py-0.5 rounded">{date}</span>}
+          {date && <span className="text-xs text-slate-500 font-mono bg-slate-100 px-2 py-0.5 rounded">{new Date(date).toLocaleDateString()}</span>}
         </div>
         <div className="text-sm text-slate-600 bg-white border border-slate-200 rounded-lg p-3 shadow-sm">
           {children || <span className="text-slate-400 italic text-xs">Pending action...</span>}
@@ -132,14 +133,21 @@ const BookTracking: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(10);
 
+  // Load Real Data
   useEffect(() => {
-    setLoading(true);
-    // Simulate API Load (Empty Data)
-    setTimeout(() => {
-      setData([]);
-      setLoading(false);
-    }, 500);
-  }, []);
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const books = await api.getAllBooksLifecycle();
+        setData(books);
+      } catch (e) {
+        console.error("Failed to load book tracking data", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [selectedYagam]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -148,10 +156,10 @@ const BookTracking: React.FC = () => {
   // --- Counts for Header ---
   const counts = useMemo(() => {
       return {
-          Printed: 0,
+          Printed: data.length, // Approximation or fetch real batch total if needed
           Distributed: data.filter(b => b.status === 'Distributed').length,
           Registered: data.filter(b => b.status === 'Registered').length,
-          Submitted: data.filter(b => b.status === 'Submitted').length,
+          Submitted: data.filter(b => b.status === 'Submitted' || b.status === 'Donor Updated').length,
           DonorUpdated: data.filter(b => b.status === 'Donor Updated').length
       };
   }, [data]);
@@ -161,20 +169,24 @@ const BookTracking: React.FC = () => {
     let filtered = data;
 
     // 1. Strict Tab Filter
-    // Only show books that EXACTLY match the current phase status
-    filtered = data.filter(b => b.status === activeTab);
+    if (activeTab === 'Submitted') {
+        // Show both Submitted and Donor Updated in Submitted tab, or keep strict
+        filtered = data.filter(b => b.status === 'Submitted' || b.status === 'Donor Updated');
+    } else {
+        filtered = data.filter(b => b.status === activeTab);
+    }
 
     // 2. Search
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(b => 
         b.bookNumber.toLowerCase().includes(q) ||
-        b.distributorName.toLowerCase().includes(q) ||
+        (b.distributorName && b.distributorName.toLowerCase().includes(q)) ||
         (b.recipientName && b.recipientName.toLowerCase().includes(q))
       );
     }
 
-    // 3. Sorting (Amount) - Only relevant for Submitted & Donor Updated tabs
+    // 3. Sorting (Amount)
     if (activeTab === 'Submitted' || activeTab === 'Donor Updated') {
         filtered = [...filtered].sort((a, b) => {
             const amtA = a.donationAmount || 0;
@@ -246,7 +258,7 @@ const BookTracking: React.FC = () => {
                 <div className="bg-slate-900 text-white p-6 shrink-0 flex justify-between items-start">
                     <div>
                         <div className="flex items-center gap-3 mb-2">
-                            <Book size={24} className="text-indigo-400" />
+                            <Book size={24} className="text-emerald-400" />
                             <h2 className="text-2xl font-bold tracking-tight">{selectedBook.bookNumber}</h2>
                         </div>
                         <div className="flex items-center gap-2">
@@ -273,21 +285,21 @@ const BookTracking: React.FC = () => {
                         >
                             <div className="space-y-2">
                                 <div className="flex items-start gap-2">
-                                    <User size={14} className="mt-0.5 text-slate-400" />
+                                    <User size={14} className="mt-0.5 text-slate-400 shrink-0" />
                                     <div>
                                         <p className="text-xs text-slate-500 uppercase font-bold">Incharge</p>
                                         <p className="text-sm font-medium text-slate-900">{selectedBook.distributorName}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-2">
-                                    <Phone size={14} className="mt-0.5 text-slate-400" />
+                                    <Phone size={14} className="mt-0.5 text-slate-400 shrink-0" />
                                     <div>
                                         <p className="text-xs text-slate-500 uppercase font-bold">Phone</p>
                                         <p className="text-sm font-medium text-slate-900">{selectedBook.distributorPhone}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-2 pt-2 border-t border-slate-100">
-                                    <MapPin size={14} className="mt-0.5 text-slate-400" />
+                                    <MapPin size={14} className="mt-0.5 text-slate-400 shrink-0" />
                                     <div>
                                         <p className="text-xs text-slate-500 uppercase font-bold">Location</p>
                                         <p className="text-xs text-slate-700 leading-relaxed">{selectedBook.distributionAddress}</p>
@@ -307,21 +319,21 @@ const BookTracking: React.FC = () => {
                             {selectedBook.recipientName ? (
                                 <div className="space-y-2">
                                     <div className="flex items-start gap-2">
-                                        <User size={14} className="mt-0.5 text-slate-400" />
+                                        <User size={14} className="mt-0.5 text-slate-400 shrink-0" />
                                         <div>
                                             <p className="text-xs text-slate-500 uppercase font-bold">Recipient</p>
                                             <p className="text-sm font-medium text-slate-900">{selectedBook.recipientName}</p>
                                         </div>
                                     </div>
                                     <div className="flex items-start gap-2">
-                                        <Phone size={14} className="mt-0.5 text-slate-400" />
+                                        <Phone size={14} className="mt-0.5 text-slate-400 shrink-0" />
                                         <div>
                                             <p className="text-xs text-slate-500 uppercase font-bold">Phone</p>
                                             <p className="text-sm font-medium text-slate-900">{selectedBook.recipientPhone}</p>
                                         </div>
                                     </div>
                                     <div className="flex items-start gap-2 pt-2 border-t border-slate-100">
-                                        <MapPin size={14} className="mt-0.5 text-slate-400" />
+                                        <MapPin size={14} className="mt-0.5 text-slate-400 shrink-0" />
                                         <div>
                                             <p className="text-xs text-slate-500 uppercase font-bold">Location</p>
                                             <p className="text-xs text-slate-700 leading-relaxed">{selectedBook.registrationAddress}</p>
@@ -344,11 +356,11 @@ const BookTracking: React.FC = () => {
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
                                             <p className="text-xs text-slate-500 uppercase font-bold">Payment</p>
-                                            <p className="text-sm font-medium text-slate-900">{selectedBook.paymentMode}</p>
+                                            <p className="text-sm font-medium text-slate-900">{selectedBook.paymentMode || 'Offline'}</p>
                                         </div>
                                         <div>
-                                            <p className="text-xs text-slate-500 uppercase font-bold">Donors</p>
-                                            <p className="text-sm font-medium text-slate-900">{selectedBook.totalDonors}</p>
+                                            <p className="text-xs text-slate-500 uppercase font-bold">Donors Filled</p>
+                                            <p className="text-sm font-medium text-slate-900">{selectedBook.totalDonors || 0}</p>
                                         </div>
                                     </div>
                                     <div className="bg-emerald-50 p-2 rounded border border-emerald-100 flex justify-between items-center">
@@ -372,7 +384,7 @@ const BookTracking: React.FC = () => {
                                 {selectedBook.isDonorUpdated ? (
                                     <>
                                         <CheckCircle size={16} className="text-purple-600" />
-                                        <span className="text-sm font-medium text-slate-900">Donor Details Digitized</span>
+                                        <span className="text-sm font-medium text-slate-900">Details Digitized</span>
                                     </>
                                 ) : (
                                     <>
@@ -420,7 +432,7 @@ const BookTracking: React.FC = () => {
         
       {/* Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 w-full xl:w-auto mb-6">
-          <StatCard label="Printed Books" count={counts.Printed} icon={Printer} color="bg-slate-600" />
+          <StatCard label="Total Books" count={counts.Printed} icon={Printer} color="bg-slate-600" />
           <StatCard label="Distributed" count={counts.Distributed} icon={Truck} color="bg-indigo-600" />
           <StatCard label="Registered" count={counts.Registered} icon={User} color="bg-blue-600" />
           <StatCard label="Submitted" count={counts.Submitted} icon={CheckCircle} color="bg-emerald-600" />
@@ -510,7 +522,7 @@ const BookTracking: React.FC = () => {
                                         } else if (col.key === 'donationAmount') {
                                             content = <span className="font-bold text-emerald-600">{val ? `₹${val.toLocaleString()}` : '-'}</span>;
                                         } else if (col.key.includes('Date')) {
-                                            content = <span className="text-slate-500">{String(val || '-')}</span>;
+                                            content = <span className="text-slate-500">{val ? new Date(String(val)).toLocaleDateString() : '-'}</span>;
                                         } else if (col.key.includes('Address')) {
                                             content = (
                                                 <div className="flex items-center max-w-xs" title={String(val || '')}>

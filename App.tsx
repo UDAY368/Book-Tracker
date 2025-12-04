@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
@@ -15,6 +16,7 @@ import DonorTracking from './pages/DonorTracking';
 import DateRangeAnalytics from './pages/DateRangeAnalytics';
 import BookTracking from './pages/BookTracking';
 import UsersInfo from './pages/UsersInfo';
+import AddLocation from './pages/AddLocation';
 import Leaderboard from './components/Leaderboard';
 import { User } from './types';
 import { api } from './services/api';
@@ -117,6 +119,7 @@ const App: React.FC = () => {
           <Route path="/users" element={<UsersInfo />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/add-location" element={<AddLocation />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/help" element={<Help />} />
           {/* Catch-all for 404s */}

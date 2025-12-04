@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   BookOpen, CheckCircle, Clock, 
-  User, Filter, ArrowUpDown, RefreshCw, Heart, MapPin
+  User, Filter, ArrowUpDown, RefreshCw, Heart, MapPin, AlertCircle
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell 
@@ -12,18 +12,12 @@ import { ReceiverBook } from '../../types';
 
 // --- Constants & Data ---
 
-const LOCATION_DATA: Record<string, Record<string, string[]>> = {};
-
 const YAGAM_OPTIONS = [
   "Dhyana Maha Yagam - 1", 
   "Dhyana Maha Yagam - 2", 
   "Dhyana Maha Yagam - 3", 
   "Dhyana Maha Yagam - 4"
 ];
-
-const getCentersForTown = (town: string) => {
-    return [];
-};
 
 // --- Helper Components ---
 
@@ -32,18 +26,21 @@ const StatCard = ({
   value, 
   icon: Icon, 
   colorClass, 
-  bgClass 
+  bgClass,
+  isPending = false
 }: { 
   title: string, 
   value: string | number, 
   icon: any, 
   colorClass: string, 
-  bgClass: string 
+  bgClass: string,
+  isPending?: boolean
 }) => (
-  <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between transition-all hover:shadow-md">
+  <div className={`bg-white p-5 rounded-xl border ${isPending ? 'border-amber-200 ring-1 ring-amber-100' : 'border-slate-100'} shadow-sm flex items-center justify-between transition-all hover:shadow-md`}>
     <div>
       <p className="text-xs text-slate-500 uppercase font-bold tracking-wide">{title}</p>
       <h3 className="text-2xl font-bold text-slate-900 mt-1">{value}</h3>
+      {isPending && <p className="text-[10px] text-amber-600 font-bold mt-1">Action Required</p>}
     </div>
     <div className={`p-3 rounded-lg ${bgClass} ${colorClass}`}>
       <Icon size={24} />
@@ -86,6 +83,7 @@ const FilterSelect = ({
 const ReceiverDashboard: React.FC = () => {
   const [books, setBooks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [locationData, setLocationData] = useState<any>({});
   
   // Filters
   const [selectedYagam, setSelectedYagam] = useState("Dhyana Maha Yagam - 4");
@@ -98,10 +96,11 @@ const ReceiverDashboard: React.FC = () => {
 
   const loadBooks = async () => {
     setLoading(true);
-    const data = await api.getReceiverBooks();
+    const [data, locData] = await Promise.all([
+        api.getReceiverBooks(),
+        api.getLocations()
+    ]);
     
-    // Simulate Random Locations for the received data to make filters work in this demo
-    // Removed random location enrichment
     const enrichedData = data.map((b, i) => {
         return {
             ...b,
@@ -109,11 +108,12 @@ const ReceiverDashboard: React.FC = () => {
             district: b.district || '',
             town: b.town || '',
             center: b.center || '',
-            isDonorUpdated: !!b.paymentMode 
+            // Ensure we use the isDonorUpdated flag from API which implements the strict logic
         };
     });
 
     setBooks(enrichedData);
+    setLocationData(locData);
     setLoading(false);
   };
 
@@ -136,6 +136,12 @@ const ReceiverDashboard: React.FC = () => {
     setTimeout(() => setIsRefining(false), 200);
   };
 
+  const getCentersForTown = (town: string) => {
+    return (location.state && location.district && town) 
+        ? (locationData[location.state]?.[location.district]?.[town] || []) 
+        : [];
+  };
+
   // Filtered Data Computation
   const filteredBooks = useMemo(() => {
       return books.filter(b => {
@@ -148,18 +154,27 @@ const ReceiverDashboard: React.FC = () => {
   }, [books, location]);
 
   // --- Stats Calculation ---
+  // Status Flow: Distributed -> Registered -> Received (Submitted) -> (Logic Check) -> Donor Updated
   const totalDistributed = filteredBooks.length;
   const totalRegistered = filteredBooks.filter(b => b.status === 'Registered').length;
+  
+  // Submitted includes Donor Updated because Donor Updated books are also 'Received' status
   const totalSubmitted = filteredBooks.filter(b => b.status === 'Received').length;
-  const totalDonorUpdated = filteredBooks.filter(b => b.isDonorUpdated).length; // New Metric
-  const pendingBooks = filteredBooks.filter(b => b.status !== 'Received').length;
+  
+  // Donor Updated is strict subset of Submitted where entered >= declared
+  const totalDonorUpdated = filteredBooks.filter(b => b.isDonorUpdated).length; 
+  
+  // Pending Data Entry = Submitted Books that are NOT yet fully Donor Updated
+  const pendingDataEntry = totalSubmitted - totalDonorUpdated;
+  
+  const pendingRegistration = filteredBooks.filter(b => b.status === 'Distributed').length;
 
   const chartData = [
     { name: 'Distributed', value: totalDistributed, color: '#6366f1' },
     { name: 'Registered', value: totalRegistered, color: '#3b82f6' },
     { name: 'Submitted', value: totalSubmitted, color: '#10b981' },
-    { name: 'Donor Updated', value: totalDonorUpdated, color: '#8b5cf6' }, // Added to Chart
-    { name: 'Pending', value: pendingBooks, color: '#f59e0b' },
+    { name: 'Pending Entry', value: pendingDataEntry, color: '#f59e0b' },
+    { name: 'Completed', value: totalDonorUpdated, color: '#8b5cf6' },
   ];
 
   if (loading) return <div className="p-8 text-center text-slate-400">Loading Dashboard...</div>;
@@ -213,20 +228,20 @@ const ReceiverDashboard: React.FC = () => {
                 label="State" 
                 value={location.state} 
                 onChange={(e) => handleLocationChange('state', e.target.value)} 
-                options={Object.keys(LOCATION_DATA)} 
+                options={Object.keys(locationData)} 
             />
             <FilterSelect 
                 label="District" 
                 value={location.district} 
                 onChange={(e) => handleLocationChange('district', e.target.value)} 
-                options={location.state ? Object.keys(LOCATION_DATA[location.state]) : []}
+                options={location.state ? Object.keys(locationData[location.state] || {}) : []}
                 disabled={!location.state}
             />
             <FilterSelect 
                 label="Mandal / Town" 
                 value={location.town} 
                 onChange={(e) => handleLocationChange('town', e.target.value)} 
-                options={location.district ? (LOCATION_DATA[location.state]?.[location.district] || []) : []}
+                options={location.district ? (Object.keys(locationData[location.state]?.[location.district] || {})) : []}
                 disabled={!location.district}
             />
             <FilterSelect 
@@ -241,23 +256,23 @@ const ReceiverDashboard: React.FC = () => {
 
       {/* 3. KPI Cards */}
       <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 transition-opacity duration-300 ${isRefining ? 'opacity-60' : 'opacity-100'}`}>
-         {/* Renamed: Distributed Books */}
+         {/* Total Assigned / Distributed */}
          <StatCard 
-            title="Distributed Books" 
+            title="Total Assigned" 
             value={totalDistributed} 
             icon={BookOpen} 
             bgClass="bg-indigo-50" 
             colorClass="text-indigo-600" 
          />
-         {/* Renamed: Registered Books */}
+         {/* Pending Submission (Registered but not Submitted) */}
          <StatCard 
-            title="Registered Books" 
+            title="Pending Submit" 
             value={totalRegistered} 
-            icon={User} 
+            icon={Clock} 
             bgClass="bg-blue-50" 
             colorClass="text-blue-600" 
          />
-         {/* Renamed: Submitted Books */}
+         {/* Submitted (Received) */}
          <StatCard 
             title="Submitted Books" 
             value={totalSubmitted} 
@@ -265,21 +280,22 @@ const ReceiverDashboard: React.FC = () => {
             bgClass="bg-emerald-50" 
             colorClass="text-emerald-600" 
          />
-         {/* NEW CARD: Donor Updated */}
+         {/* Pending Data Entry (Critical Gap) */}
          <StatCard 
-            title="Donor Updated" 
+            title="Pending Donor Update" 
+            value={pendingDataEntry} 
+            icon={AlertCircle} 
+            bgClass="bg-amber-50" 
+            colorClass="text-amber-600"
+            isPending={false} // Removed highlight as requested
+         />
+         {/* Completed (Donor Updated) */}
+         <StatCard 
+            title="Fully Completed" 
             value={totalDonorUpdated} 
             icon={Heart} 
             bgClass="bg-purple-50" 
             colorClass="text-purple-600" 
-         />
-         {/* Renamed: Pending Books */}
-         <StatCard 
-            title="Pending Books" 
-            value={pendingBooks} 
-            icon={Clock} 
-            bgClass="bg-amber-50" 
-            colorClass="text-amber-600" 
          />
       </div>
 

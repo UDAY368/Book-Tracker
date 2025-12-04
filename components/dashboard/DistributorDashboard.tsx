@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend
@@ -9,19 +11,12 @@ import {
 import { api } from '../../services/api';
 import { DistributorStats } from '../../types';
 
-// Location Data for Filters (Empty)
-const LOCATION_DATA: Record<string, Record<string, string[]>> = {};
-
 const YAGAM_OPTIONS = [
   "Dhyana Maha Yagam - 1", 
   "Dhyana Maha Yagam - 2", 
   "Dhyana Maha Yagam - 3", 
   "Dhyana Maha Yagam - 4"
 ];
-
-const getCentersForTown = (town: string) => {
-    return [];
-};
 
 // Enhanced Card Component to show Total vs Gap
 const LifecycleCard: React.FC<{ 
@@ -83,6 +78,7 @@ const LifecycleCard: React.FC<{
 const DistributorDashboard: React.FC = () => {
   const [stats, setStats] = useState<DistributorStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [locationData, setLocationData] = useState<any>({});
   
   // Filters
   const [selectedYagam, setSelectedYagam] = useState("Dhyana Maha Yagam - 4");
@@ -90,20 +86,30 @@ const DistributorDashboard: React.FC = () => {
 
   useEffect(() => {
     const loadData = async () => {
-      const statsData = await api.getDistributorStats();
+      const [statsData, locData] = await Promise.all([
+          api.getDistributorStats(),
+          api.getLocations()
+      ]);
       setStats(statsData);
+      setLocationData(locData);
       setLoading(false);
     };
     loadData();
   }, [selectedYagam]); // Re-load if Yagam changes (mock behavior)
 
+  // Helper for centers
+  const getCentersForTown = (town: string) => {
+    return (location.state && location.district && town) 
+        ? (locationData[location.state]?.[location.district]?.[town] || []) 
+        : [];
+  };
+
   // Compute scaled stats based on filters to simulate data granularity
   const displayStats = useMemo(() => {
     if (!stats) return null;
-    let factor = 1;
-    // Removed specific factor scaling logic to prevent random data generation on filter
     
-    const scaled = {
+    // In a real app, API would handle filtering. Here we return the raw stats.
+    return {
       totalPrinted: stats.totalPrinted,
       totalDistributed: stats.totalDistributed,
       totalRegistered: stats.totalRegistered,
@@ -111,12 +117,7 @@ const DistributorDashboard: React.FC = () => {
       printedNotDistributed: stats.printedNotDistributed,
       distributedNotRegistered: stats.distributedNotRegistered,
       registeredNotReceived: stats.registeredNotReceived,
-    };
-
-    // Calculate donor updated based on scaled received
-    return {
-        ...scaled,
-        donorUpdated: Math.round(scaled.totalReceived * 0.8) // Keep simplistic logic but on actual data
+      donorUpdated: stats.donorUpdated
     };
   }, [stats, location]);
 
@@ -194,7 +195,7 @@ const DistributorDashboard: React.FC = () => {
                  onChange={(e) => setLocation({ state: e.target.value, district: '', town: '', center: '' })}
                >
                  <option value="">All States</option>
-                 {Object.keys(LOCATION_DATA).map(s => <option key={s} value={s}>{s}</option>)}
+                 {Object.keys(locationData).map(s => <option key={s} value={s}>{s}</option>)}
                </select>
             </div>
             <div>
@@ -206,7 +207,7 @@ const DistributorDashboard: React.FC = () => {
                  disabled={!location.state}
                >
                  <option value="">All Districts</option>
-                 {location.state && Object.keys(LOCATION_DATA[location.state] || {}).map(d => (
+                 {location.state && Object.keys(locationData[location.state] || {}).map(d => (
                     <option key={d} value={d}>{d}</option>
                  ))}
                </select>
@@ -220,7 +221,7 @@ const DistributorDashboard: React.FC = () => {
                  disabled={!location.district}
                >
                  <option value="">All Towns</option>
-                 {location.district && (LOCATION_DATA[location.state]?.[location.district] || []).map(t => (
+                 {location.district && (Object.keys(locationData[location.state]?.[location.district] || {})).map(t => (
                     <option key={t} value={t}>{t}</option>
                  ))}
                </select>

@@ -14,18 +14,12 @@ import { InchargeStats } from '../../types';
 
 // --- Constants & Data ---
 
-const LOCATION_DATA: Record<string, Record<string, string[]>> = {};
-
 const YAGAM_OPTIONS = [
   "Dhyana Maha Yagam - 1", 
   "Dhyana Maha Yagam - 2", 
   "Dhyana Maha Yagam - 3", 
   "Dhyana Maha Yagam - 4"
 ];
-
-const getCentersForTown = (town: string) => {
-    return [];
-};
 
 // --- Helper Components ---
 
@@ -106,6 +100,7 @@ const InchargeDashboard: React.FC = () => {
   const [stats, setStats] = useState<InchargeStats | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [isRefining, setIsRefining] = useState(false);
+  const [locationData, setLocationData] = useState<any>({});
   
   // Filters
   const [selectedYagam, setSelectedYagam] = useState("Dhyana Maha Yagam - 4");
@@ -116,8 +111,12 @@ const InchargeDashboard: React.FC = () => {
     const loadData = async () => {
       setInitialLoading(true);
       try {
-        const s = await api.getInchargeStats();
+        const [s, locData] = await Promise.all([
+             api.getInchargeStats(),
+             api.getLocations()
+        ]);
         setStats(s);
+        setLocationData(locData);
       } catch (err) {
         console.error(err);
       } finally {
@@ -146,6 +145,12 @@ const InchargeDashboard: React.FC = () => {
     setIsRefining(true);
     setLocation({ state: '', district: '', town: '', center: '' });
     setTimeout(() => setIsRefining(false), 200);
+  };
+
+  const getCentersForTown = (town: string) => {
+    return (location.state && location.district && town) 
+        ? (locationData[location.state]?.[location.district]?.[town] || []) 
+        : [];
   };
 
   // Compute Scaled Stats based on filters locally
@@ -230,20 +235,20 @@ const InchargeDashboard: React.FC = () => {
                 label="State" 
                 value={location.state} 
                 onChange={(e) => handleLocationChange('state', e.target.value)} 
-                options={Object.keys(LOCATION_DATA)} 
+                options={Object.keys(locationData)} 
             />
             <FilterSelect 
                 label="District" 
                 value={location.district} 
                 onChange={(e) => handleLocationChange('district', e.target.value)} 
-                options={location.state ? Object.keys(LOCATION_DATA[location.state]) : []}
+                options={location.state ? Object.keys(locationData[location.state] || {}) : []}
                 disabled={!location.state}
             />
             <FilterSelect 
                 label="Mandal / Town" 
                 value={location.town} 
                 onChange={(e) => handleLocationChange('town', e.target.value)} 
-                options={location.district ? (LOCATION_DATA[location.state]?.[location.district] || []) : []}
+                options={location.district ? (Object.keys(locationData[location.state]?.[location.district] || {})) : []}
                 disabled={!location.district}
             />
             <FilterSelect 
@@ -373,7 +378,7 @@ const InchargeDashboard: React.FC = () => {
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                 <div className="text-center">
                                     <p className="text-3xl font-bold text-slate-800">{completionRate}%</p>
-                                    <p className="text-[10px] uppercase font-bold text-slate-400">Complete</p>
+                                    <p className="text--[10px] uppercase font-bold text-slate-400">Complete</p>
                                 </div>
                             </div>
                             <ResponsiveContainer width="100%" height="100%">

@@ -1,5 +1,4 @@
 
-
 export enum UserRole {
   SUPER_ADMIN = 'Super Admin',
   BOOK_DISTRIBUTOR = 'Book Distributor',
@@ -61,21 +60,36 @@ export interface Book {
 
 export interface BookPage {
   pageNumber: number;
+  isFilled: boolean;
+  
+  // Donor Personal Info
   receiptNumber?: string;
   donorName?: string;
   donorPhone?: string;
-  donorAddress?: string;
-  receiverName?: string;
+  email?: string;
+  gender?: 'Male' | 'Female' | 'Others';
+  profession?: string;
+  
+  // ID Proof
+  idProofType?: string;
+  idProofNumber?: string;
+  
+  // Payment Info
   amount?: number;
+  paymentMode?: 'Online' | 'Offline' | 'Check';
+  transactionId?: string;
+  checkNumber?: string;
   date?: string;
-  isFilled: boolean;
-  // New fields for Donor Submit
+
+  // Address
   state?: string;
   district?: string;
   town?: string;
-  paymentMode?: 'Online' | 'Offline';
-  transactionId?: string;
-  profession?: string; // Added profession
+  donorAddress?: string; // Specific address like Street/House No
+  pincode?: string; // Added Pincode
+  
+  // Legacy/Optional
+  receiverName?: string;
 }
 
 export interface ReceiverBook {
@@ -92,13 +106,20 @@ export interface ReceiverBook {
   totalAmount: number;
   assignedDate: string;
   receivedDate?: string;
-  paymentMode?: 'Online' | 'Offline'; // New field for payment tracking
+  paymentMode?: 'Online' | 'Offline' | 'Check'; // New field for payment tracking
+  transactionId?: string;
+  checkNumber?: string;
   pages?: BookPage[];       // Loaded on demand
   // Enriched location data for filtering
   state?: string;
   district?: string;
   town?: string;
   center?: string;
+  address?: string; // Added address for display
+  
+  // Calculated status
+  isDonorUpdated?: boolean;
+  enteredDonors?: number;
 }
 
 export interface KPI {
@@ -117,6 +138,7 @@ export interface DistributorStats {
   printedNotDistributed: number;
   distributedNotRegistered: number;
   registeredNotReceived: number;
+  donorUpdated: number;
 }
 
 export interface InchargeStats {
@@ -132,7 +154,6 @@ export interface RegionStat {
   amountCollected: number;
   printed?: number;
   registered?: number;
-  received?: number;
 }
 
 export interface TreeData {

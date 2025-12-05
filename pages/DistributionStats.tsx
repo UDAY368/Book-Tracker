@@ -84,7 +84,8 @@ const DistributionStats: React.FC = () => {
   const filteredDistributions = distributions.filter(d => 
     d.name?.toLowerCase().includes(detailsSearchQuery.toLowerCase()) ||
     d.phone?.includes(detailsSearchQuery) ||
-    d.type?.toLowerCase().includes(detailsSearchQuery.toLowerCase())
+    d.type?.toLowerCase().includes(detailsSearchQuery.toLowerCase()) ||
+    d.entityName?.toLowerCase().includes(detailsSearchQuery.toLowerCase())
   );
   const paginatedDetails = filteredDistributions.slice((detailsPage - 1) * itemsPerPage, detailsPage * itemsPerPage);
   const totalDetailsPages = Math.ceil(filteredDistributions.length / itemsPerPage);
@@ -121,6 +122,13 @@ const DistributionStats: React.FC = () => {
                                 {viewModalData.type}
                              </span>
                          </div>
+                    </div>
+
+                    <div className="border-t border-slate-100 pt-4">
+                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">
+                            {viewModalData.type === 'Center' ? 'Center Name' : viewModalData.type === 'District' ? 'District Name' : viewModalData.type === 'Autonomous' ? 'Autonomous Body' : 'Type Detail'}
+                         </label>
+                         <p className="text-sm font-medium text-slate-900 mt-1">{viewModalData.entityName || '-'}</p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4">
@@ -275,8 +283,8 @@ const DistributionStats: React.FC = () => {
                               <tr>
                                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Batch Name</th>
                                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Printed Date</th>
-                                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Range</th>
-                                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Total Books</th>
+                                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Serial Range</th>
+                                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Total / Remaining</th>
                                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Status</th>
                               </tr>
                            </thead>
@@ -288,8 +296,10 @@ const DistributionStats: React.FC = () => {
                                       <tr key={batch.id} className="hover:bg-slate-50">
                                           <td className="px-6 py-4 text-sm font-medium text-slate-900">{batch.batchName}</td>
                                           <td className="px-6 py-4 text-sm text-slate-500">{new Date(batch.printedDate).toLocaleDateString()}</td>
-                                          <td className="px-6 py-4 text-sm text-slate-500 font-mono text-xs">{batch.startSerial} - {batch.endSerial}</td>
-                                          <td className="px-6 py-4 text-sm font-bold text-slate-700">{batch.totalBooks}</td>
+                                          <td className="px-6 py-4 text-sm text-slate-500 font-mono text-xs">{batch.bookSerialStart} - {batch.bookSerialEnd}</td>
+                                          <td className="px-6 py-4 text-sm font-bold text-slate-700">
+                                              {batch.totalBooks} <span className="text-slate-400 font-normal mx-1">/</span> <span className="text-emerald-600">{batch.remainingBooks ?? batch.totalBooks}</span>
+                                          </td>
                                           <td className="px-6 py-4">
                                               <span className={`px-2 py-1 rounded-full text-xs font-bold border ${
                                                   batch.status === 'In Stock' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
@@ -327,7 +337,7 @@ const DistributionStats: React.FC = () => {
                             <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
                             <input 
                                type="text" 
-                               placeholder="Search Incharge, Phone or Type..." 
+                               placeholder="Search Incharge, Phone, Type or Entity..." 
                                value={detailsSearchQuery} 
                                onChange={(e) => setDetailsSearchQuery(e.target.value)}
                                className="pl-9 pr-4 py-2 w-full text-sm border-none focus:ring-0"
@@ -340,21 +350,25 @@ const DistributionStats: React.FC = () => {
                            <thead className="bg-slate-50">
                               <tr>
                                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Date</th>
-                                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Incharge Name</th>
+                                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Incharge</th>
                                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Type</th>
-                                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Total Books</th>
-                                 <th className="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase">Actions</th>
+                                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Type Name</th>
+                                 <th className="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase">Distribute</th>
+                                 <th className="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase">Register</th>
+                                 <th className="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase">Submit</th>
+                                 <th className="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase">Updated</th>
+                                 <th className="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase">Action</th>
                               </tr>
                            </thead>
                            <tbody className="bg-white divide-y divide-slate-100">
                               {paginatedDetails.length === 0 ? (
-                                  <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">No distribution records found.</td></tr>
+                                  <tr><td colSpan={9} className="px-6 py-12 text-center text-slate-400 italic">No distribution records found.</td></tr>
                               ) : (
                                   paginatedDetails.map(dist => (
                                       <tr key={dist.id} className="hover:bg-slate-50 transition-colors">
-                                          <td className="px-6 py-4 text-sm text-slate-500 font-medium">{formatDate(dist.date)}</td>
-                                          <td className="px-6 py-4 text-sm font-bold text-slate-800">{dist.name}</td>
-                                          <td className="px-6 py-4">
+                                          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">{formatDate(dist.date)}</td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-slate-800">{dist.name}</td>
+                                          <td className="px-6 py-4 whitespace-nowrap">
                                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
                                                   dist.type === 'Individual' ? 'bg-blue-50 text-blue-700 border-blue-100' : 
                                                   dist.type === 'District' ? 'bg-amber-50 text-amber-700 border-amber-100' :
@@ -363,8 +377,14 @@ const DistributionStats: React.FC = () => {
                                                   {dist.type}
                                               </span>
                                           </td>
-                                          <td className="px-6 py-4 text-sm font-bold text-indigo-600">{dist.count}</td>
-                                          <td className="px-6 py-4 text-right">
+                                          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700 font-medium">
+                                              {dist.type === 'Individual' ? '-' : (dist.entityName || '-')}
+                                          </td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-indigo-600">{dist.count}</td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-slate-800 font-bold">{dist.registeredCount}</td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-slate-800 font-bold">{dist.submittedCount}</td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-slate-800 font-bold">{dist.donorUpdatedCount}</td>
+                                          <td className="px-6 py-4 whitespace-nowrap text-right">
                                               <button 
                                                   onClick={() => setViewModalData(dist)}
                                                   className="text-sm font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-md transition-colors"

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
@@ -19,7 +20,8 @@ const Layout: React.FC<LayoutProps> = ({ children, userRole, onLogout }) => {
   const getPageTitle = (path: string) => {
     const p = path.toLowerCase();
     if (p.includes('/dashboard')) return 'Dashboard';
-    if (p.includes('/distribution')) return 'Book Distribution';
+    if (p.includes('/add-distribution')) return 'Add Distribution';
+    if (p.includes('/distribution')) return 'Add Print Batch';
     if (p.includes('/collection')) return 'Book Collection';
     if (p.includes('/users')) return 'User Management';
     if (p.includes('/analytics')) return 'Analytics & Reports';

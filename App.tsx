@@ -13,11 +13,13 @@ import BookRegister from './pages/BookRegister';
 import NewBookRegister from './pages/NewBookRegister';
 import DonorSubmit from './pages/DonorSubmit';
 import DonorTracking from './pages/DonorTracking';
+import RecipientTracking from './pages/RecipientTracking';
 import DateRangeAnalytics from './pages/DateRangeAnalytics';
 import BookTracking from './pages/BookTracking';
 import UsersInfo from './pages/UsersInfo';
 import AddLocation from './pages/AddLocation';
 import Leaderboard from './components/Leaderboard';
+import ReceiverDashboard from './components/dashboard/ReceiverDashboard';
 import { User } from './types';
 import { api } from './services/api';
 
@@ -105,9 +107,11 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard role={user.role} />} />
+          <Route path="/receiver-dashboard" element={<ReceiverDashboard />} />
           <Route path="/distribution" element={<Distribution role={user.role} />} />
           <Route path="/distribution-stats" element={<DistributionStats />} />
           <Route path="/book-tracking" element={<BookTracking />} />
+          <Route path="/recipient-tracking" element={<RecipientTracking />} />
           <Route path="/donor-tracking" element={<DonorTracking />} />
           <Route path="/add-distribution" element={<AddDistribution role={user.role} />} />
           <Route path="/book-update" element={<BookUpdate />} />

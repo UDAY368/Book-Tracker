@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, CheckCircle, AlertCircle, 
   Save, X, Loader2, ChevronLeft, ChevronRight,
   Book, Calendar, User, Phone, 
-  ArrowRight, CreditCard, Banknote, IndianRupee, RefreshCw, Hash, FileText
+  ArrowRight, CreditCard, Banknote, IndianRupee, RefreshCw, Hash, FileText,
+  Printer, CheckSquare, Square, Download
 } from 'lucide-react';
 import { api } from '../services/api';
 import { ReceiverBook } from '../types';
@@ -23,6 +25,10 @@ const BookSubmit: React.FC = () => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
+  // History Selection State
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set());
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+
   // Form State
   const [formData, setFormData] = useState({
      submissionDate: new Date().toISOString().split('T')[0],
@@ -32,6 +38,8 @@ const BookSubmit: React.FC = () => {
      checkNumber: '',
      amount: '' // Keep as string for input handling
   });
+
+  const receiptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadBooks();
@@ -72,6 +80,7 @@ const BookSubmit: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
+    setSelectedHistoryIds(new Set()); // Reset selection on tab change
   }, [activeTab, searchQuery]);
 
   // Handlers
@@ -122,10 +131,111 @@ const BookSubmit: React.FC = () => {
       }
   };
 
+  // Selection Handlers
+  const handleSelectHistory = (id: string) => {
+      const newSet = new Set(selectedHistoryIds);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      setSelectedHistoryIds(newSet);
+  };
+
+  const handleSelectAllHistory = () => {
+      if (selectedHistoryIds.size === paginatedBooks.length && paginatedBooks.length > 0) {
+          setSelectedHistoryIds(new Set());
+      } else {
+          const newSet = new Set<string>();
+          paginatedBooks.forEach(b => newSet.add(b.id));
+          setSelectedHistoryIds(newSet);
+      }
+  };
+
+  const handlePrintReceipt = () => {
+      const content = receiptRef.current;
+      if (!content) return;
+
+      // Create a hidden iframe
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentWindow?.document;
+      if (doc) {
+          doc.open();
+          doc.write(`
+              <html>
+                  <head>
+                      <title>Submission Receipt</title>
+                      <style>
+                          body { font-family: 'Inter', sans-serif; padding: 40px; }
+                          .receipt-container { max-width: 800px; margin: 0 auto; border: 1px solid #e2e8f0; padding: 40px; border-radius: 8px; }
+                          .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px; }
+                          .header h1 { color: #1e293b; font-size: 24px; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
+                          .header p { color: #64748b; font-size: 14px; margin-top: 8px; }
+                          .content { margin-bottom: 40px; }
+                          .row { display: flex; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px; }
+                          .label { font-weight: bold; color: #64748b; font-size: 14px; }
+                          .value { font-weight: bold; color: #0f172a; font-size: 16px; text-align: right; }
+                          .footer { text-align: center; margin-top: 60px; color: #64748b; font-size: 14px; font-weight: 600; }
+                          .book-list { font-family: monospace; background: #f8fafc; padding: 10px; border-radius: 4px; font-size: 14px; line-height: 1.5; text-align: right; max-width: 60%; }
+                      </style>
+                  </head>
+                  <body>
+                      ${content.innerHTML}
+                  </body>
+              </html>
+          `);
+          doc.close();
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          
+          // Cleanup
+          setTimeout(() => {
+              document.body.removeChild(iframe);
+          }, 1000);
+      }
+  };
+
+  const handleDownloadPDF = () => {
+      const element = receiptRef.current;
+      if (!element) return;
+
+      const opt = {
+          margin: 10,
+          filename: `submission_receipt_${new Date().getTime()}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      const scriptUrl = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+      
+      // Helper to execute save
+      const savePdf = () => {
+          if ((window as any).html2pdf) {
+              (window as any).html2pdf().set(opt).from(element).save();
+          } else {
+              alert("Error loading PDF generator. Please check your connection.");
+          }
+      };
+
+      // Check if script is already loaded
+      if ((window as any).html2pdf) {
+          savePdf();
+      } else {
+          // Dynamic Load
+          const script = document.createElement('script');
+          script.src = scriptUrl;
+          script.onload = savePdf;
+          document.body.appendChild(script);
+      }
+  };
+
   // Stats Calculation
-  // Total Assigned = All books that reached the receiver (Registered + Received)
-  // Pending = Registered
-  // Submitted = Received
   const stats = {
       totalAssigned: books.filter(b => b.status === 'Registered' || b.status === 'Received').length,
       pending: books.filter(b => b.status === 'Registered').length,
@@ -133,6 +243,29 @@ const BookSubmit: React.FC = () => {
   };
 
   const completionRate = stats.totalAssigned > 0 ? Math.round((stats.submitted / stats.totalAssigned) * 100) : 0;
+
+  // Receipt Data Preparation
+  const getReceiptData = () => {
+      const selectedItems = books.filter(b => selectedHistoryIds.has(b.id));
+      if (selectedItems.length === 0) return null;
+
+      const totalDonors = selectedItems.reduce((sum, b) => sum + (b.filledPages || 0), 0);
+      const totalAmount = selectedItems.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+      
+      // Determine recipient name
+      const uniqueNames = Array.from(new Set(selectedItems.map(b => b.assignedToName)));
+      const recipientName = uniqueNames.length === 1 ? uniqueNames[0] : 'Multiple Recipients';
+
+      return {
+          items: selectedItems,
+          totalDonors,
+          totalAmount,
+          recipientName,
+          isSingle: selectedItems.length === 1
+      };
+  };
+
+  const receiptData = getReceiptData();
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-20 animate-in fade-in duration-500 relative">
@@ -202,13 +335,13 @@ const BookSubmit: React.FC = () => {
                   onClick={() => setActiveTab('history')}
                   className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors border-b-2 ${activeTab === 'history' ? 'border-emerald-500 text-emerald-700 bg-emerald-50/20' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
                >
-                  <CheckCircle size={16} /> Submission History
+                  <CheckCircle size={16} /> Generate Receipt
                   <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs ml-1">{stats.submitted}</span>
                </button>
            </div>
 
            {/* Toolbar */}
-           <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
+           <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50 sticky top-0 z-20">
                <div className="relative w-full max-w-md">
                    <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
                    <input 
@@ -219,9 +352,20 @@ const BookSubmit: React.FC = () => {
                       className="pl-9 pr-4 py-2 w-full border border-slate-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white"
                    />
                </div>
-               <button onClick={loadBooks} className="p-2 text-slate-500 hover:text-indigo-600 bg-white border border-slate-200 rounded-lg shadow-sm hover:shadow transition-all" title="Refresh Data">
-                   <RefreshCw size={18} />
-               </button>
+               
+               <div className="flex items-center gap-3">
+                   {activeTab === 'history' && selectedHistoryIds.size > 0 && (
+                       <button 
+                          onClick={() => setShowReceiptModal(true)}
+                          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-indigo-700 transition-all animate-in zoom-in"
+                       >
+                           <Printer size={16} /> Generate Receipt ({selectedHistoryIds.size})
+                       </button>
+                   )}
+                   <button onClick={loadBooks} className="p-2 text-slate-500 hover:text-indigo-600 bg-white border border-slate-200 rounded-lg shadow-sm hover:shadow transition-all" title="Refresh Data">
+                       <RefreshCw size={18} />
+                   </button>
+               </div>
            </div>
 
            {/* Table */}
@@ -233,8 +377,15 @@ const BookSubmit: React.FC = () => {
                    </div>
                ) : (
                    <table className="min-w-full divide-y divide-slate-200">
-                       <thead className="bg-slate-50 sticky top-0 z-10">
+                       <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                            <tr>
+                               {activeTab === 'history' && (
+                                   <th className="px-6 py-3 w-10">
+                                       <button onClick={handleSelectAllHistory} className="text-slate-500 hover:text-indigo-600">
+                                           {selectedHistoryIds.size === paginatedBooks.length && paginatedBooks.length > 0 ? <CheckSquare size={18} className="text-indigo-600"/> : <Square size={18}/>}
+                                       </button>
+                                   </th>
+                               )}
                                <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Book Number</th>
                                <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Recipient Name</th>
                                <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Phone Number</th>
@@ -249,10 +400,17 @@ const BookSubmit: React.FC = () => {
                        </thead>
                        <tbody className="bg-white divide-y divide-slate-100">
                            {paginatedBooks.length === 0 ? (
-                               <tr><td colSpan={activeTab === 'history' ? 6 : 4} className="px-6 py-12 text-center text-slate-400 italic">No books found in this category.</td></tr>
+                               <tr><td colSpan={activeTab === 'history' ? 7 : 4} className="px-6 py-12 text-center text-slate-400 italic">No books found in this category.</td></tr>
                            ) : (
                                paginatedBooks.map((book, idx) => (
-                                   <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                   <tr key={idx} className={`hover:bg-slate-50 transition-colors ${selectedHistoryIds.has(book.id) ? 'bg-indigo-50/40' : ''}`}>
+                                       {activeTab === 'history' && (
+                                           <td className="px-6 py-4 whitespace-nowrap">
+                                               <button onClick={() => handleSelectHistory(book.id)} className="text-slate-400 hover:text-indigo-600">
+                                                   {selectedHistoryIds.has(book.id) ? <CheckSquare size={18} className="text-indigo-600"/> : <Square size={18}/>}
+                                               </button>
+                                           </td>
+                                       )}
                                        <td className="px-6 py-4 whitespace-nowrap">
                                            <div className="flex items-center gap-2">
                                                <Book size={16} className="text-slate-400" />
@@ -510,6 +668,90 @@ const BookSubmit: React.FC = () => {
                            </button>
                        </div>
                    </form>
+               </div>
+           </div>
+       )}
+
+       {/* Receipt Modal */}
+       {showReceiptModal && receiptData && (
+           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+               <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowReceiptModal(false)}></div>
+               <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl relative z-10 flex flex-col max-h-[90vh]">
+                   <div className="bg-indigo-600 px-6 py-4 text-white flex justify-between items-center rounded-t-xl">
+                       <h3 className="text-xl font-bold flex items-center gap-2"><Printer size={20}/> Submission Receipt Preview</h3>
+                       <button onClick={() => setShowReceiptModal(false)} className="text-indigo-200 hover:text-white bg-indigo-700/50 p-1.5 rounded-full transition-colors"><X size={20} /></button>
+                   </div>
+                   
+                   <div className="flex-1 overflow-auto bg-slate-100 p-8 flex justify-center">
+                       <div ref={receiptRef} className="bg-white p-10 shadow-lg w-full max-w-2xl border border-slate-200 print:shadow-none print:border-0">
+                           {/* Receipt Content Structure matches specified requirements */}
+                           <div className="text-center border-b-2 border-slate-100 pb-6 mb-6">
+                               <h1 className="text-2xl font-bold text-slate-800 uppercase tracking-wide">Patriji Dhayana Maha Yagam - 4</h1>
+                               <p className="text-slate-500 text-sm mt-2">Official Book Submission Receipt</p>
+                           </div>
+
+                           <div className="space-y-4 text-slate-700">
+                               {receiptData.isSingle ? (
+                                   <>
+                                       <div className="flex justify-between border-b border-dashed border-slate-200 pb-2">
+                                           <span className="font-bold text-slate-500">Book Number</span>
+                                           <span className="font-bold font-mono text-lg">{receiptData.items[0].bookNumber}</span>
+                                       </div>
+                                       <div className="flex justify-between border-b border-dashed border-slate-200 pb-2">
+                                           <span className="font-bold text-slate-500">Recipient Name</span>
+                                           <span className="font-bold">{receiptData.items[0].assignedToName}</span>
+                                       </div>
+                                       <div className="flex justify-between border-b border-dashed border-slate-200 pb-2">
+                                           <span className="font-bold text-slate-500">Total Donors</span>
+                                           <span className="font-bold">{receiptData.items[0].filledPages}</span>
+                                       </div>
+                                       <div className="flex justify-between border-b border-dashed border-slate-200 pb-2">
+                                           <span className="font-bold text-slate-500">Donation Amount</span>
+                                           <span className="font-bold text-xl">₹{receiptData.items[0].totalAmount.toLocaleString()}</span>
+                                       </div>
+                                   </>
+                               ) : (
+                                   <>
+                                       <div className="flex justify-between items-start border-b border-dashed border-slate-200 pb-2">
+                                           <span className="font-bold text-slate-500 mt-1">Book Numbers</span>
+                                           <div className="font-mono text-sm text-right bg-slate-50 p-2 rounded max-w-[60%] leading-relaxed">
+                                               {receiptData.items.map(b => b.bookNumber).join(', ')}
+                                           </div>
+                                       </div>
+                                       <div className="flex justify-between border-b border-dashed border-slate-200 pb-2">
+                                           <span className="font-bold text-slate-500">Recipient Name</span>
+                                           <span className="font-bold">{receiptData.recipientName}</span>
+                                       </div>
+                                       <div className="flex justify-between border-b border-dashed border-slate-200 pb-2">
+                                           <span className="font-bold text-slate-500">Total Donors</span>
+                                           <span className="font-bold">{receiptData.totalDonors}</span>
+                                       </div>
+                                       <div className="flex justify-between border-b border-dashed border-slate-200 pb-2">
+                                           <span className="font-bold text-slate-500">Total Donation Amount</span>
+                                           <span className="font-bold text-xl">₹{receiptData.totalAmount.toLocaleString()}</span>
+                                       </div>
+                                   </>
+                               )}
+                           </div>
+
+                           <div className="text-center mt-12 pt-6 border-t border-slate-100">
+                               <h3 className="text-xl font-serif italic text-slate-600">Thank You</h3>
+                               <p className="text-xs text-slate-400 mt-2">Pyramid Spiritual Society Movement</p>
+                           </div>
+                       </div>
+                   </div>
+
+                   <div className="p-4 bg-white border-t border-slate-200 flex justify-end gap-3 rounded-b-xl">
+                       <button onClick={() => setShowReceiptModal(false)} className="px-5 py-2.5 text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg font-bold transition-colors">
+                           Cancel
+                       </button>
+                       <button onClick={handlePrintReceipt} className="px-6 py-2.5 bg-slate-800 text-white rounded-lg font-bold hover:bg-slate-900 shadow-lg flex items-center gap-2">
+                           <Printer size={18} /> Print
+                       </button>
+                       <button onClick={handleDownloadPDF} className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-lg flex items-center gap-2">
+                           <Download size={18} /> Download PDF
+                       </button>
+                   </div>
                </div>
            </div>
        )}

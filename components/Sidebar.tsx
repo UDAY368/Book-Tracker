@@ -3,7 +3,6 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, 
-  BookOpen, 
   Users, 
   BarChart3, 
   LogOut, 
@@ -23,7 +22,8 @@ import {
   PieChart,
   Search,
   UserCheck,
-  MapPin
+  MapPin,
+  Printer
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -45,21 +45,28 @@ const Sidebar: React.FC<SidebarProps> = ({
   onLogout 
 }) => {
   const links = [
-    { to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, roles: [UserRole.SUPER_ADMIN, UserRole.BOOK_DISTRIBUTOR, UserRole.INCHARGE, UserRole.BOOK_RECEIVER, UserRole.VOLUNTEER] },
-    { to: '/date-range-analytics', label: 'Date Analytics', icon: <CalendarRange size={20} />, roles: [UserRole.SUPER_ADMIN] },
+    // 1. Dashboard (Common) - For Incharge this shows InchargeDashboard
+    { to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, roles: [UserRole.SUPER_ADMIN, UserRole.BOOK_DISTRIBUTOR, UserRole.INCHARGE, UserRole.VOLUNTEER] },
+    
+    // Incharge / Staff Priority Order
+    { to: '/new-book-register', label: 'New Book Register', icon: <BookPlus size={20} />, roles: [UserRole.INCHARGE] },
+    // Removed Receiver Dashboard Link for Incharge as per requirement
+    { to: '/book-update', label: 'Book Submit', icon: <Edit size={20} />, roles: [UserRole.INCHARGE] },
+    { to: '/donor-submit', label: 'Donor Submit', icon: <UserPlus size={20} />, roles: [UserRole.INCHARGE] },
+
+    // Book Distributor Priority Order
+    { to: '/distribution', label: 'Add Print Batch', icon: <Printer size={20} />, roles: [UserRole.BOOK_DISTRIBUTOR, UserRole.STAFF] },
+    { to: '/add-distribution', label: 'Add Distribution', icon: <PlusCircle size={20} />, roles: [UserRole.BOOK_DISTRIBUTOR] },
+    
+    // Super Admin & Other Tools
+    // Removed Date Analytics as per requirement
     { to: '/distribution-stats', label: 'Distribution Stats', icon: <PieChart size={20} />, roles: [UserRole.SUPER_ADMIN] },
     { to: '/book-tracking', label: 'Book Tracking', icon: <Search size={20} />, roles: [UserRole.SUPER_ADMIN] },
+    { to: '/recipient-tracking', label: 'Recipient Tracking', icon: <Users size={20} />, roles: [UserRole.SUPER_ADMIN] },
     { to: '/donor-tracking', label: 'Donor Tracking', icon: <UserCheck size={20} />, roles: [UserRole.SUPER_ADMIN] },
     { to: '/add-location', label: 'Add Location', icon: <MapPin size={20} />, roles: [UserRole.SUPER_ADMIN] },
-    { to: '/add-distribution', label: 'Add Distribution', icon: <PlusCircle size={20} />, roles: [UserRole.BOOK_DISTRIBUTOR] },
-    { to: '/distribution', label: 'Distribution Info', icon: <BookOpen size={20} />, roles: [UserRole.BOOK_DISTRIBUTOR, UserRole.STAFF] },
-    // Renamed 'Quick Update' to 'Book Submit'
-    { to: '/book-update', label: 'Book Submit', icon: <Edit size={20} />, roles: [UserRole.BOOK_RECEIVER] },
-    // Added 'Donor Submit'
-    { to: '/donor-submit', label: 'Donor Submit', icon: <UserPlus size={20} />, roles: [UserRole.BOOK_RECEIVER] },
-    // New Book Register Page for Incharge
-    { to: '/new-book-register', label: 'New Book Register', icon: <BookPlus size={20} />, roles: [UserRole.INCHARGE] },
-    // Old Book Register (Hidden for Incharge now, accessible by others if needed, or remove Incharge)
+    
+    // Legacy / Other
     { to: '/book-register', label: 'Book Register', icon: <FileText size={20} />, roles: [] }, 
     { to: '/collection', label: 'Collection', icon: <UploadCloud size={20} />, roles: [UserRole.STAFF] },
     { to: '/users', label: 'Users Info', icon: <Users size={20} />, roles: [UserRole.SUPER_ADMIN] },
@@ -73,9 +80,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const filteredLinks = links.filter(link => link.roles.includes(role));
-
-  // Mock pending approvals count for Super Admin
-  const pendingApprovals = 3;
 
   return (
     <>

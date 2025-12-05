@@ -43,7 +43,7 @@ export interface PrintBatch {
   bookSerialEnd: string;
   printedDate: string;
   printerName?: string;
-  status: 'In Stock' | 'Partially Distributed' | 'Fully Distributed';
+  status: 'In Stock' | 'Partial Distributed' | 'Out of Stock';
 }
 
 export interface Book {

@@ -4,9 +4,72 @@ import {
   Search, CheckCircle, AlertCircle, MapPin, 
   User, Phone, Calendar, Book, ArrowRight,
   Filter, ChevronLeft, ChevronRight, X, Loader2,
-  RefreshCw, History, ClipboardList, ChevronDown
+  RefreshCw, History, ClipboardList, ChevronDown, CheckSquare, Square, Edit
 } from 'lucide-react';
 import { api } from '../services/api';
+
+// --- Local Searchable Select Component (Reused logic) ---
+const SearchableSelect = ({ 
+  label, 
+  value, 
+  options, 
+  onChange, 
+  placeholder,
+  disabled = false
+}: { label: string, value: string, options: string[], onChange: (val: string) => void, placeholder: string, disabled?: boolean }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [filter, setFilter] = useState('');
+  
+  useEffect(() => {
+      setFilter(value);
+  }, [value]);
+
+  const filteredOptions = options.filter(opt => opt.toLowerCase().includes(filter.toLowerCase()));
+
+  return (
+    <div className="relative">
+      <label className="block text-sm font-bold text-slate-700 mb-1">{label} <span className="text-red-500">*</span></label>
+      <div className="relative">
+          <input
+              type="text"
+              value={filter} 
+              onClick={() => !disabled && setIsOpen(!isOpen)}
+              onChange={(e) => {
+                  setFilter(e.target.value);
+                  onChange(e.target.value); 
+                  setIsOpen(true);
+              }}
+              disabled={disabled}
+              className="block w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm disabled:bg-slate-50 disabled:text-slate-400 transition-all"
+              placeholder={placeholder}
+              onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+              autoComplete="off"
+          />
+          {!disabled && (
+              <ChevronDown className="absolute right-3 top-2.5 text-slate-400 pointer-events-none" size={16} />
+          )}
+      </div>
+      {isOpen && filteredOptions.length > 0 && (
+          <ul className="absolute z-50 mt-1 w-full bg-white shadow-xl max-h-48 rounded-lg py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none custom-scrollbar border border-slate-100">
+              {filteredOptions.map((opt) => (
+                  <li 
+                      key={opt}
+                      className="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-indigo-50 text-slate-900 transition-colors"
+                      onMouseDown={(e) => {
+                          e.preventDefault(); 
+                          onChange(opt);
+                          setFilter(opt);
+                          setIsOpen(false);
+                      }}
+                  >
+                      {opt}
+                  </li>
+              ))}
+          </ul>
+      )}
+    </div>
+  );
+};
 
 const NewBookRegister: React.FC = () => {
   const [books, setBooks] = useState<any[]>([]);
@@ -16,7 +79,7 @@ const NewBookRegister: React.FC = () => {
   
   // Register Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedBook, setSelectedBook] = useState<any | null>(null);
+  const [selectedBooks, setSelectedBooks] = useState<Set<string>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   
   // Location Data State
@@ -35,8 +98,9 @@ const NewBookRegister: React.FC = () => {
      state: '',
      district: '',
      town: '',
-     center: '',
-     specificAddress: ''
+     center: '', // Keeping Center if needed, though req spec mainly focused on State/Dist/Town
+     houseNo: '',
+     pincode: ''
   });
 
   useEffect(() => {
@@ -65,14 +129,14 @@ const NewBookRegister: React.FC = () => {
   const getStates = () => Object.keys(locationData);
   const getDistricts = () => formData.state ? Object.keys(locationData[formData.state] || {}) : [];
   const getTowns = () => formData.district ? Object.keys(locationData[formData.state]?.[formData.district] || {}) : [];
-  const getCenters = () => formData.town ? (locationData[formData.state]?.[formData.district]?.[formData.town] || []) : [];
 
   // Filter Logic
   const filteredBooks = books.filter(book => {
       const matchesSearch = 
           book.bookNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
           (book.recipientName && book.recipientName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          (book.phone && book.phone.includes(searchQuery));
+          (book.phone && book.phone.includes(searchQuery)) || 
+          (book.inchargeName && book.inchargeName.toLowerCase().includes(searchQuery.toLowerCase()));
       
       if (activeTab === 'pending') {
           return matchesSearch && book.status === 'Pending';
@@ -90,40 +154,85 @@ const NewBookRegister: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
+    setSelectedBooks(new Set()); // Reset selections on tab/search change
   }, [activeTab, searchQuery]);
 
-  // Handlers
-  const openRegisterModal = (book: any) => {
-      setSelectedBook(book);
-      setFormData({
-         recipientName: '',
-         phone: '',
-         pssmId: '',
-         date: new Date().toISOString().split('T')[0],
-         state: '',
-         district: '',
-         town: '',
-         center: '',
-         specificAddress: ''
-      });
+  // --- Handlers ---
+
+  // Checkbox Logic
+  const handleSelectAll = () => {
+      if (selectedBooks.size === paginatedBooks.length && paginatedBooks.length > 0) {
+          setSelectedBooks(new Set());
+      } else {
+          const newSet = new Set<string>();
+          paginatedBooks.forEach(b => newSet.add(b.bookNumber));
+          setSelectedBooks(newSet);
+      }
+  };
+
+  const handleSelectOne = (bookNumber: string) => {
+      const newSet = new Set(selectedBooks);
+      if (newSet.has(bookNumber)) {
+          newSet.delete(bookNumber);
+      } else {
+          newSet.add(bookNumber);
+      }
+      setSelectedBooks(newSet);
+  };
+
+  // Modal Triggers
+  const openRegisterModal = (bookToEdit?: any) => {
+      if (bookToEdit) {
+          // Single Edit Mode (from History or Single Action)
+          setSelectedBooks(new Set([bookToEdit.bookNumber]));
+          
+          // Pre-fill form if editing
+          if (activeTab === 'registered') {
+              setFormData({
+                  recipientName: bookToEdit.recipientName || '',
+                  phone: bookToEdit.phone || '',
+                  pssmId: bookToEdit.pssmId || '',
+                  date: bookToEdit.date ? bookToEdit.date.split('T')[0] : new Date().toISOString().split('T')[0],
+                  state: bookToEdit.locationState || '',
+                  district: bookToEdit.locationDistrict || '',
+                  town: bookToEdit.locationTown || '',
+                  center: bookToEdit.center || '',
+                  houseNo: bookToEdit.address ? bookToEdit.address.split(',')[0] : '', // Rough approximation for edit
+                  pincode: bookToEdit.pincode || ''
+              });
+          } else {
+              // New Registration default
+              setFormData({
+                  recipientName: '', phone: '', pssmId: '',
+                  date: new Date().toISOString().split('T')[0],
+                  state: '', district: '', town: '', center: '', houseNo: '', pincode: ''
+              });
+          }
+      } else {
+          // Bulk Mode
+          if (selectedBooks.size === 0) return;
+          setFormData({
+              recipientName: '', phone: '', pssmId: '',
+              date: new Date().toISOString().split('T')[0],
+              state: '', district: '', town: '', center: '', houseNo: '', pincode: ''
+          });
+      }
       setIsModalOpen(true);
   };
 
   const handleLocationChange = (field: string, value: string) => {
       setFormData(prev => {
           const next = { ...prev, [field]: value };
-          if (field === 'state') { next.district = ''; next.town = ''; next.center = ''; }
-          if (field === 'district') { next.town = ''; next.center = ''; }
-          if (field === 'town') { next.center = ''; }
+          if (field === 'state') { next.district = ''; next.town = ''; }
+          if (field === 'district') { next.town = ''; }
           return next;
       });
   };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!selectedBook) return;
       
-      // Basic validation for location
+      // Basic validation
       if (!formData.state || !formData.district || !formData.town) {
           alert("Please select State, District, and Town.");
           return;
@@ -131,8 +240,9 @@ const NewBookRegister: React.FC = () => {
 
       setIsSaving(true);
       try {
+          const bookNumbers = Array.from(selectedBooks);
           await api.registerBook({
-              bookNumber: selectedBook.bookNumber,
+              bookNumbers: bookNumbers,
               recipientName: formData.recipientName,
               phone: formData.phone,
               pssmId: formData.pssmId,
@@ -141,17 +251,21 @@ const NewBookRegister: React.FC = () => {
               district: formData.district,
               town: formData.town,
               center: formData.center,
-              address: `${formData.specificAddress}, ${formData.center ? formData.center + ', ' : ''}${formData.town}, ${formData.district}, ${formData.state}`
+              pincode: formData.pincode,
+              specificAddress: formData.houseNo, // Helper for constructing full address
+              address: `${formData.houseNo}, ${formData.town}, ${formData.district}, ${formData.state}${formData.pincode ? ' - ' + formData.pincode : ''}`
           });
 
-          setToastMessage(`Book ${selectedBook.bookNumber} Registered Successfully!`);
+          setToastMessage(`${bookNumbers.length} Book(s) Registered Successfully!`);
           setShowToast(true);
           setTimeout(() => setShowToast(false), 3000);
           
-          await loadBooks(); // Refresh list to reflect changes in "Pending" and "History"
+          await loadBooks(); 
           setIsModalOpen(false);
+          setSelectedBooks(new Set());
       } catch (error) {
-          alert("Failed to register book");
+          console.error(error);
+          alert("Failed to register books");
       } finally {
           setIsSaving(false);
       }
@@ -243,7 +357,7 @@ const NewBookRegister: React.FC = () => {
            </div>
 
            {/* Toolbar */}
-           <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
+           <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50 sticky top-0 z-20">
                <div className="relative w-full max-w-md">
                    <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
                    <input 
@@ -254,9 +368,21 @@ const NewBookRegister: React.FC = () => {
                       className="pl-9 pr-4 py-2 w-full border border-slate-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white"
                    />
                </div>
-               <button onClick={loadBooks} className="p-2 text-slate-500 hover:text-indigo-600 bg-white border border-slate-200 rounded-lg shadow-sm hover:shadow transition-all" title="Refresh Data">
-                   <RefreshCw size={18} />
-               </button>
+               
+               <div className="flex items-center gap-3">
+                   {activeTab === 'pending' && selectedBooks.size > 0 && (
+                       <button 
+                          onClick={() => openRegisterModal()}
+                          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-indigo-700 transition-all animate-in zoom-in"
+                       >
+                           <ClipboardList size={16} />
+                           Register Selected ({selectedBooks.size})
+                       </button>
+                   )}
+                   <button onClick={loadBooks} className="p-2 text-slate-500 hover:text-indigo-600 bg-white border border-slate-200 rounded-lg shadow-sm hover:shadow transition-all" title="Refresh Data">
+                       <RefreshCw size={18} />
+                   </button>
+               </div>
            </div>
 
            {/* Table */}
@@ -268,67 +394,97 @@ const NewBookRegister: React.FC = () => {
                    </div>
                ) : (
                    <table className="min-w-full divide-y divide-slate-200">
-                       <thead className="bg-slate-50 sticky top-0 z-10">
+                       <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
                            <tr>
-                               <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Book Number</th>
-                               <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Assigned Location</th>
-                               {activeTab === 'registered' && (
+                               {/* Pending Registration Columns */}
+                               {activeTab === 'pending' && (
                                    <>
-                                       <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Recipient</th>
-                                       <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Reg. Date</th>
+                                       <th className="px-6 py-3 w-10">
+                                           <button onClick={handleSelectAll} className="text-slate-500 hover:text-indigo-600">
+                                               {selectedBooks.size === paginatedBooks.length && paginatedBooks.length > 0 ? <CheckSquare size={18} className="text-indigo-600"/> : <Square size={18}/>}
+                                           </button>
+                                       </th>
+                                       <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Book Number</th>
+                                       <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Incharge Name</th>
+                                       <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Phone Num</th>
+                                       <th className="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Action</th>
                                    </>
                                )}
-                               <th className="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Action</th>
+
+                               {/* Registration History Columns */}
+                               {activeTab === 'registered' && (
+                                   <>
+                                       <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Book Number</th>
+                                       <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Recipient Name</th>
+                                       <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Phone Num</th>
+                                       <th className="px-6 py-3 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">Action</th>
+                                   </>
+                               )}
                            </tr>
                        </thead>
                        <tbody className="bg-white divide-y divide-slate-100">
                            {paginatedBooks.length === 0 ? (
-                               <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">No books found in this category.</td></tr>
+                               <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">No books found in this category.</td></tr>
                            ) : (
                                paginatedBooks.map((book, idx) => (
-                                   <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                       <td className="px-6 py-4 whitespace-nowrap">
-                                           <div className="flex items-center gap-2">
-                                               <Book size={16} className="text-slate-400" />
-                                               <span className="font-bold font-mono text-indigo-600">{book.bookNumber}</span>
-                                           </div>
-                                       </td>
-                                       <td className="px-6 py-4 whitespace-nowrap">
-                                           <div className="flex flex-col">
-                                               <span className="text-sm text-slate-900 font-medium">{book.locationTown}, {book.locationDistrict}</span>
-                                               <span className="text-xs text-slate-500">{book.locationState}</span>
-                                           </div>
-                                       </td>
-                                       {activeTab === 'registered' && (
+                                   <tr key={idx} className={`hover:bg-slate-50 transition-colors ${selectedBooks.has(book.bookNumber) ? 'bg-indigo-50/40' : ''}`}>
+                                       
+                                       {/* Pending Row */}
+                                       {activeTab === 'pending' && (
                                            <>
                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                   <div className="flex flex-col">
-                                                       <span className="text-sm font-bold text-slate-800">{book.recipientName}</span>
-                                                       <span className="text-xs text-slate-500 flex items-center"><Phone size={10} className="mr-1"/> {book.phone}</span>
+                                                   <button onClick={() => handleSelectOne(book.bookNumber)} className="text-slate-400 hover:text-indigo-600">
+                                                       {selectedBooks.has(book.bookNumber) ? <CheckSquare size={18} className="text-indigo-600"/> : <Square size={18}/>}
+                                                   </button>
+                                               </td>
+                                               <td className="px-6 py-4 whitespace-nowrap">
+                                                   <div className="flex items-center gap-2">
+                                                       <Book size={16} className="text-slate-400" />
+                                                       <span className="font-bold font-mono text-indigo-600">{book.bookNumber}</span>
                                                    </div>
                                                </td>
-                                               <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                                                   {new Date(book.date).toLocaleDateString()}
+                                               <td className="px-6 py-4 whitespace-nowrap">
+                                                   <span className="text-sm font-bold text-slate-800">{book.inchargeName || 'N/A'}</span>
+                                               </td>
+                                               <td className="px-6 py-4 whitespace-nowrap">
+                                                   <span className="text-sm font-medium text-slate-600">{book.inchargePhone || 'N/A'}</span>
+                                               </td>
+                                               <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                   <button 
+                                                      onClick={() => openRegisterModal(book)}
+                                                      className="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 shadow-sm shadow-indigo-200 transition-all"
+                                                   >
+                                                       Register <ArrowRight size={12} className="ml-1" />
+                                                   </button>
                                                </td>
                                            </>
                                        )}
-                                       <td className="px-6 py-4 whitespace-nowrap text-right">
-                                           {activeTab === 'pending' ? (
-                                               <button 
-                                                  onClick={() => openRegisterModal(book)}
-                                                  className="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 shadow-sm shadow-indigo-200 transition-all"
-                                               >
-                                                   Register <ArrowRight size={12} className="ml-1" />
-                                               </button>
-                                           ) : (
-                                               <button 
-                                                  onClick={() => openRegisterModal(book)} // Edit mode essentially
-                                                  className="inline-flex items-center px-3 py-1.5 bg-slate-100 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-200 border border-slate-200 transition-all"
-                                               >
-                                                   Edit Details
-                                               </button>
-                                           )}
-                                       </td>
+
+                                       {/* History Row */}
+                                       {activeTab === 'registered' && (
+                                           <>
+                                               <td className="px-6 py-4 whitespace-nowrap">
+                                                   <div className="flex items-center gap-2">
+                                                       <Book size={16} className="text-slate-400" />
+                                                       <span className="font-bold font-mono text-indigo-600">{book.bookNumber}</span>
+                                                   </div>
+                                               </td>
+                                               <td className="px-6 py-4 whitespace-nowrap">
+                                                   <span className="text-sm font-bold text-slate-800">{book.recipientName}</span>
+                                               </td>
+                                               <td className="px-6 py-4 whitespace-nowrap">
+                                                   <span className="text-sm font-medium text-slate-600 flex items-center"><Phone size={14} className="mr-1 text-slate-400"/> {book.phone}</span>
+                                               </td>
+                                               <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                   <button 
+                                                      onClick={() => openRegisterModal(book)}
+                                                      className="inline-flex items-center px-3 py-1.5 bg-white text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-50 border border-slate-200 transition-all shadow-sm"
+                                                   >
+                                                       <Edit size={14} className="mr-1"/> Edit Details
+                                                   </button>
+                                               </td>
+                                           </>
+                                       )}
                                    </tr>
                                ))
                            )}
@@ -364,17 +520,23 @@ const NewBookRegister: React.FC = () => {
        </div>
 
        {/* Registration Modal */}
-       {isModalOpen && selectedBook && (
+       {isModalOpen && (
            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
-               <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+               <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
                    {/* Modal Header */}
-                   <div className="bg-indigo-600 p-6 text-white flex justify-between items-start shrink-0">
+                   <div className="bg-indigo-600 px-6 py-5 text-white flex justify-between items-start shrink-0">
                        <div>
-                           <h3 className="text-xl font-bold">Register Book</h3>
-                           <div className="flex items-center gap-2 mt-2 opacity-90">
+                           <h3 className="text-xl font-bold">Register Books</h3>
+                           <div className="flex items-center gap-2 mt-1 opacity-90 text-sm">
                                <Book size={16} />
-                               <span className="font-mono text-lg font-bold bg-indigo-500 px-2 rounded">{selectedBook.bookNumber}</span>
+                               <span>Registering {selectedBooks.size} Book(s)</span>
+                           </div>
+                           <div className="flex flex-wrap gap-1 mt-2">
+                               {Array.from(selectedBooks).slice(0, 5).map(b => (
+                                   <span key={b} className="px-1.5 py-0.5 bg-indigo-500 rounded text-[10px] font-mono">{b}</span>
+                               ))}
+                               {selectedBooks.size > 5 && <span className="px-1.5 py-0.5 bg-indigo-500 rounded text-[10px] font-mono">+{selectedBooks.size - 5} more</span>}
                            </div>
                        </div>
                        <button onClick={() => setIsModalOpen(false)} className="text-indigo-200 hover:text-white bg-indigo-700 hover:bg-indigo-500 p-1.5 rounded-full transition-colors">
@@ -383,165 +545,144 @@ const NewBookRegister: React.FC = () => {
                    </div>
 
                    {/* Modal Body */}
-                   <form onSubmit={handleRegisterSubmit} className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
-                       <div>
-                           <label className="block text-sm font-bold text-slate-700 mb-1">Recipient Name <span className="text-red-500">*</span></label>
-                           <div className="relative">
-                               <User className="absolute left-3 top-2.5 text-slate-400" size={16} />
-                               <input 
-                                  type="text" 
-                                  required
-                                  placeholder="Full Name"
-                                  value={formData.recipientName}
-                                  onChange={(e) => setFormData({...formData, recipientName: e.target.value})}
-                                  className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                               />
+                   <form onSubmit={handleRegisterSubmit} className="p-6 overflow-y-auto custom-scrollbar bg-slate-50/50 flex-1">
+                       
+                       <div className="space-y-6">
+                           
+                           {/* Personal Information Section */}
+                           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                               <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-4 flex items-center gap-1.5">
+                                   <User size={14} className="text-indigo-500"/> Recipient Details
+                               </h4>
+                               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                   <div className="col-span-2 md:col-span-1">
+                                       <label className="block text-sm font-bold text-slate-700 mb-1">Registration Date</label>
+                                       <div className="relative">
+                                           <Calendar className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                                           <input 
+                                              type="date" 
+                                              required
+                                              value={formData.date}
+                                              onChange={(e) => setFormData({...formData, date: e.target.value})}
+                                              className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                                           />
+                                       </div>
+                                   </div>
+                                   <div className="col-span-2 md:col-span-1">
+                                       <label className="block text-sm font-bold text-slate-700 mb-1">PSSM ID</label>
+                                       <input 
+                                          type="text" 
+                                          placeholder="Optional ID"
+                                          value={formData.pssmId}
+                                          onChange={(e) => setFormData({...formData, pssmId: e.target.value})}
+                                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                                       />
+                                   </div>
+                                   <div className="col-span-2">
+                                       <label className="block text-sm font-bold text-slate-700 mb-1">Recipient Name <span className="text-red-500">*</span></label>
+                                       <input 
+                                          type="text" 
+                                          required
+                                          placeholder="Enter Full Name"
+                                          value={formData.recipientName}
+                                          onChange={(e) => setFormData({...formData, recipientName: e.target.value})}
+                                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                                       />
+                                   </div>
+                                   <div className="col-span-2">
+                                       <label className="block text-sm font-bold text-slate-700 mb-1">Phone Number <span className="text-red-500">*</span></label>
+                                       <div className="relative">
+                                           <Phone className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                                           <input 
+                                              type="tel" 
+                                              required
+                                              placeholder="10-digit Mobile Number"
+                                              value={formData.phone}
+                                              onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                                              className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                                           />
+                                       </div>
+                                   </div>
+                               </div>
                            </div>
-                       </div>
 
-                       <div className="grid grid-cols-2 gap-4">
-                           <div>
-                               <label className="block text-sm font-bold text-slate-700 mb-1">Phone Number <span className="text-red-500">*</span></label>
-                               <div className="relative">
-                                   <Phone className="absolute left-3 top-2.5 text-slate-400" size={16} />
-                                   <input 
-                                      type="tel" 
-                                      required
-                                      placeholder="10-digit Mobile"
-                                      value={formData.phone}
-                                      onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                                      className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                           {/* Location Section */}
+                           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                               <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-4 flex items-center gap-1.5">
+                                   <MapPin size={14} className="text-indigo-500"/> Location Details
+                               </h4>
+                               <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                                   <SearchableSelect 
+                                       label="State" 
+                                       value={formData.state} 
+                                       options={getStates()} 
+                                       onChange={(val) => handleLocationChange('state', val)} 
+                                       placeholder="Select State"
+                                   />
+                                   <SearchableSelect 
+                                       label="District" 
+                                       value={formData.district} 
+                                       options={getDistricts()} 
+                                       onChange={(val) => handleLocationChange('district', val)} 
+                                       placeholder="Select District"
+                                       disabled={!formData.state}
+                                   />
+                                   <SearchableSelect 
+                                       label="Town / Mandal" 
+                                       value={formData.town} 
+                                       options={getTowns()} 
+                                       onChange={(val) => handleLocationChange('town', val)} 
+                                       placeholder="Select Town"
+                                       disabled={!formData.district}
                                    />
                                </div>
-                           </div>
-                           <div>
-                               <label className="block text-sm font-bold text-slate-700 mb-1">PSSM ID</label>
-                               <input 
-                                  type="text" 
-                                  placeholder="Optional"
-                                  value={formData.pssmId}
-                                  onChange={(e) => setFormData({...formData, pssmId: e.target.value})}
-                                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                               />
-                           </div>
-                       </div>
-
-                       <div>
-                           <label className="block text-sm font-bold text-slate-700 mb-1">Registration Date</label>
-                           <div className="relative">
-                               <Calendar className="absolute left-3 top-2.5 text-slate-400" size={16} />
-                               <input 
-                                  type="date" 
-                                  required
-                                  value={formData.date}
-                                  onChange={(e) => setFormData({...formData, date: e.target.value})}
-                                  className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                               />
-                           </div>
-                       </div>
-                       
-                       {/* Location Dropdowns */}
-                       <div className="space-y-3 bg-slate-50 p-4 rounded-lg border border-slate-200">
-                           <h5 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><MapPin size={12}/> Location Details</h5>
-                           
-                           <div className="grid grid-cols-2 gap-3">
-                               <div>
-                                   <label className="block text-xs font-bold text-slate-600 mb-1">State <span className="text-red-500">*</span></label>
-                                   <div className="relative">
-                                       <select 
-                                          required 
-                                          value={formData.state} 
-                                          onChange={e => handleLocationChange('state', e.target.value)} 
-                                          className="w-full pl-2 pr-6 py-1.5 text-sm border border-slate-300 rounded appearance-none bg-white"
-                                       >
-                                           <option value="">Select State</option>
-                                           {getStates().map(s => <option key={s} value={s}>{s}</option>)}
-                                       </select>
-                                       <ChevronDown size={14} className="absolute right-2 top-2 text-slate-400 pointer-events-none" />
+                               <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mt-5">
+                                   <div className="md:col-span-3">
+                                       <label className="block text-sm font-bold text-slate-700 mb-1">House # / Street Area</label>
+                                       <input 
+                                          type="text" 
+                                          placeholder="Detailed Address"
+                                          value={formData.houseNo}
+                                          onChange={(e) => setFormData({...formData, houseNo: e.target.value})}
+                                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
+                                       />
                                    </div>
-                               </div>
-                               <div>
-                                   <label className="block text-xs font-bold text-slate-600 mb-1">District <span className="text-red-500">*</span></label>
-                                   <div className="relative">
-                                       <select 
-                                          required 
-                                          value={formData.district} 
-                                          onChange={e => handleLocationChange('district', e.target.value)} 
-                                          disabled={!formData.state}
-                                          className="w-full pl-2 pr-6 py-1.5 text-sm border border-slate-300 rounded appearance-none bg-white disabled:bg-slate-100"
-                                       >
-                                           <option value="">Select District</option>
-                                           {getDistricts().map(d => <option key={d} value={d}>{d}</option>)}
-                                       </select>
-                                       <ChevronDown size={14} className="absolute right-2 top-2 text-slate-400 pointer-events-none" />
+                                   <div className="md:col-span-1">
+                                       <label className="block text-sm font-bold text-slate-700 mb-1">Pincode</label>
+                                       <input 
+                                          type="text" 
+                                          placeholder="6-digit"
+                                          value={formData.pincode}
+                                          onChange={(e) => setFormData({...formData, pincode: e.target.value})}
+                                          maxLength={6}
+                                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
+                                       />
                                    </div>
                                </div>
                            </div>
 
-                           <div className="grid grid-cols-2 gap-3">
-                               <div>
-                                   <label className="block text-xs font-bold text-slate-600 mb-1">Town / Mandal <span className="text-red-500">*</span></label>
-                                   <div className="relative">
-                                       <select 
-                                          required 
-                                          value={formData.town} 
-                                          onChange={e => handleLocationChange('town', e.target.value)} 
-                                          disabled={!formData.district}
-                                          className="w-full pl-2 pr-6 py-1.5 text-sm border border-slate-300 rounded appearance-none bg-white disabled:bg-slate-100"
-                                       >
-                                           <option value="">Select Town</option>
-                                           {getTowns().map(t => <option key={t} value={t}>{t}</option>)}
-                                       </select>
-                                       <ChevronDown size={14} className="absolute right-2 top-2 text-slate-400 pointer-events-none" />
-                                   </div>
-                               </div>
-                               <div>
-                                   <label className="block text-xs font-bold text-slate-600 mb-1">Center</label>
-                                   <div className="relative">
-                                       <select 
-                                          value={formData.center} 
-                                          onChange={e => handleLocationChange('center', e.target.value)} 
-                                          disabled={!formData.town}
-                                          className="w-full pl-2 pr-6 py-1.5 text-sm border border-slate-300 rounded appearance-none bg-white disabled:bg-slate-100"
-                                       >
-                                           <option value="">Select Center</option>
-                                           {getCenters().map(c => <option key={c} value={c}>{c}</option>)}
-                                       </select>
-                                       <ChevronDown size={14} className="absolute right-2 top-2 text-slate-400 pointer-events-none" />
-                                   </div>
-                               </div>
-                           </div>
-                           
-                           <div>
-                               <label className="block text-xs font-bold text-slate-600 mb-1">House #, Street, Landmark</label>
-                               <input 
-                                  type="text" 
-                                  placeholder="Specific Address Details"
-                                  value={formData.specificAddress}
-                                  onChange={(e) => setFormData({...formData, specificAddress: e.target.value})}
-                                  className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded outline-none"
-                               />
-                           </div>
-                       </div>
-
-                       <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-4 shrink-0">
-                           <button 
-                              type="button" 
-                              onClick={() => setIsModalOpen(false)}
-                              className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-bold transition-colors"
-                           >
-                               Cancel
-                           </button>
-                           <button 
-                              type="submit" 
-                              disabled={isSaving}
-                              className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 flex items-center"
-                           >
-                               {isSaving ? <Loader2 className="animate-spin mr-2" size={18} /> : <CheckCircle className="mr-2" size={18} />}
-                               Confirm Registration
-                           </button>
                        </div>
                    </form>
+
+                   {/* Footer Actions */}
+                   <div className="pt-4 pb-5 px-6 flex justify-end gap-3 border-t border-slate-200 bg-white shrink-0">
+                       <button 
+                          type="button" 
+                          onClick={() => setIsModalOpen(false)}
+                          className="px-5 py-2.5 text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg font-bold transition-colors shadow-sm text-sm"
+                       >
+                           Cancel
+                       </button>
+                       <button 
+                          type="submit" 
+                          onClick={handleRegisterSubmit}
+                          disabled={isSaving}
+                          className="px-8 py-2.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 flex items-center text-sm"
+                       >
+                           {isSaving ? <Loader2 className="animate-spin mr-2" size={18} /> : <CheckCircle className="mr-2" size={18} />}
+                           Confirm Registration
+                       </button>
+                   </div>
                </div>
            </div>
        )}

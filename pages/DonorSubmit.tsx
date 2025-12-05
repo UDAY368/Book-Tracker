@@ -4,7 +4,7 @@ import {
   Search, ArrowLeft, Loader2, User, ChevronDown, ChevronUp, 
   Save, AlertTriangle, ArrowUpDown, RefreshCw, CheckCircle,
   Clock, BookOpen, AlertCircle, IndianRupee, Hash, CreditCard, Banknote, MapPin, Mail, Phone,
-  FileText, Briefcase, Eye, X, Calendar, ChevronLeft, ChevronRight, FileBadge
+  FileText, Briefcase, Eye, X, Calendar, ChevronLeft, ChevronRight, FileBadge, UserCheck, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { api } from '../services/api';
 import { ReceiverBook, BookPage } from '../types';
@@ -40,6 +40,107 @@ const StatCard = ({ title, value, icon: Icon, colorClass, bgClass, subtext }: { 
         {subtext && <p className="text-xs text-slate-400 mt-1">{subtext}</p>}
     </div>
 );
+
+// --- New Reusable Searchable Select Component ---
+const SearchableSelect = ({ 
+  label, 
+  value, 
+  options, 
+  onChange, 
+  placeholder,
+  disabled = false,
+  className = ""
+}: { 
+  label: string, 
+  value: string, 
+  options: string[], 
+  onChange: (val: string) => void, 
+  placeholder: string, 
+  disabled?: boolean,
+  className?: string
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [filter, setFilter] = useState('');
+  
+  // Sync internal filter with external value changes (persistence loading)
+  useEffect(() => {
+      setFilter(value || '');
+  }, [value]);
+
+  const filteredOptions = options.filter(opt => opt.toLowerCase().includes(filter.toLowerCase()));
+
+  return (
+    <div className={`relative ${className}`}>
+      <label className="block text-xs font-bold text-slate-600 mb-1">{label} <span className="text-red-500">*</span></label>
+      <div className="relative">
+          <input
+              type="text"
+              value={filter} 
+              onClick={() => !disabled && setIsOpen(!isOpen)}
+              onChange={(e) => {
+                  setFilter(e.target.value);
+                  if (e.target.value === '') onChange(''); // Clear value in parent
+                  setIsOpen(true);
+              }}
+              disabled={disabled}
+              className="block w-full pl-3 pr-8 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm disabled:bg-slate-50 disabled:text-slate-400 transition-all font-medium text-slate-800 placeholder-slate-400"
+              placeholder={placeholder}
+              onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+              autoComplete="off"
+          />
+          
+          {/* Clear Button (Only shows when value exists and not disabled) */}
+          {!disabled && value && (
+             <button 
+                type="button"
+                onClick={(e) => { 
+                    e.stopPropagation(); 
+                    onChange(''); 
+                    setFilter(''); 
+                }}
+                className="absolute right-8 top-2.5 text-slate-400 hover:text-red-500 transition-colors z-10"
+                title="Clear"
+             >
+                <X size={14} />
+             </button>
+          )}
+
+          {!disabled && (
+              <div className="absolute right-3 top-2.5 text-slate-400 pointer-events-none">
+                  <ChevronDown size={16} />
+              </div>
+          )}
+      </div>
+      
+      {/* Dropdown List */}
+      {isOpen && filteredOptions.length > 0 && (
+          <ul className="absolute z-50 mt-1 w-full bg-white shadow-xl max-h-56 rounded-lg py-1 text-sm ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none custom-scrollbar border border-slate-100 animate-in fade-in zoom-in-95 duration-100">
+              {filteredOptions.map((opt) => (
+                  <li 
+                      key={opt}
+                      className="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-indigo-50 text-slate-900 transition-colors font-medium border-b border-slate-50 last:border-0"
+                      onMouseDown={(e) => {
+                          e.preventDefault(); 
+                          onChange(opt);
+                          setFilter(opt);
+                          setIsOpen(false);
+                      }}
+                  >
+                      {opt}
+                  </li>
+              ))}
+          </ul>
+      )}
+      
+      {/* No Results State */}
+      {isOpen && filteredOptions.length === 0 && (
+          <div className="absolute z-50 mt-1 w-full bg-white shadow-lg rounded-lg p-3 text-xs text-slate-400 text-center border border-slate-100">
+              No matches found
+          </div>
+      )}
+    </div>
+  );
+};
 
 const DonorSubmit: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'submitted' | 'info'>('submitted');
@@ -78,9 +179,10 @@ const DonorSubmit: React.FC = () => {
   const [loadingExpanded, setLoadingExpanded] = useState(false);
   const [viewDonorModal, setViewDonorModal] = useState<BookPage | null>(null);
 
-  // --- Expanded Row Search & Pagination ---
+  // --- Expanded Row Search, Pagination & Sorting ---
   const [expandedSearch, setExpandedSearch] = useState('');
   const [expandedPage, setExpandedPage] = useState(1);
+  const [expandedSort, setExpandedSort] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const expandedRowsPerPage = 5;
 
   useEffect(() => {
@@ -141,9 +243,6 @@ const DonorSubmit: React.FC = () => {
       );
 
       if (activeTab === 'info') {
-          // Show all submitted books in Info View so we can see partial progress too, 
-          // or strictly fully updated. Requirement usually implies checking data.
-          // Let's show all submitted so they can see donors of partially filled books too.
           return filtered; 
       }
       
@@ -198,6 +297,7 @@ const DonorSubmit: React.FC = () => {
         email: fullEmail
     };
 
+    // Persistence: This call saves to LocalStorage via api.ts
     await api.saveBookPage(selectedBook.id, updatedPage);
     
     const updatedPages = pages.map(p => p.pageNumber === activePage.pageNumber ? updatedPage : p);
@@ -221,9 +321,9 @@ const DonorSubmit: React.FC = () => {
   };
 
   // --- Dropdown Logic ---
-  const getStates = () => Object.keys(locationData);
-  const getDistricts = () => activePage?.state ? Object.keys(locationData[activePage.state] || {}) : [];
-  const getTowns = () => activePage?.district ? Object.keys(locationData[activePage.state]?.[activePage.district] || {}) : [];
+  const getStates = () => Object.keys(locationData).sort();
+  const getDistricts = () => activePage?.state ? Object.keys(locationData[activePage.state] || {}).sort() : [];
+  const getTowns = () => activePage?.district ? Object.keys(locationData[activePage.state]?.[activePage.district] || {}).sort() : [];
 
   const handleLocationChange = (field: keyof BookPage, value: string) => {
       if (!activePage) return;
@@ -244,23 +344,50 @@ const DonorSubmit: React.FC = () => {
           setLoadingExpanded(true);
           setExpandedSearch(''); // Reset inner search
           setExpandedPage(1);    // Reset inner pagination
+          setExpandedSort(null); // Reset sort
           const p = await api.getReceiverBookDetails(bookId);
           setExpandedBookPages(p.filter(pg => pg.isFilled));
           setLoadingExpanded(false);
       }
   };
 
-  // --- Expanded View Logic ---
-  const getFilteredExpandedPages = () => {
-      if (!expandedSearch) return expandedBookPages;
-      const q = expandedSearch.toLowerCase();
-      return expandedBookPages.filter(p => 
-          (p.donorName && p.donorName.toLowerCase().includes(q)) ||
-          (p.donorPhone && p.donorPhone.includes(q))
-      );
+  const handleExpandedSort = (key: string) => {
+      setExpandedSort(prev => {
+          if (prev?.key === key) {
+              return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+          }
+          return { key, direction: 'asc' };
+      });
   };
 
-  const filteredExpandedPages = getFilteredExpandedPages();
+  // --- Expanded View Logic (Filter & Sort) ---
+  const getProcessedExpandedPages = () => {
+      // 1. Filter
+      let processed = expandedBookPages;
+      if (expandedSearch) {
+          const q = expandedSearch.toLowerCase();
+          processed = processed.filter(p => 
+              (p.donorName && p.donorName.toLowerCase().includes(q)) ||
+              (p.donorPhone && p.donorPhone.includes(q))
+          );
+      }
+
+      // 2. Sort
+      if (expandedSort) {
+          processed = [...processed].sort((a, b) => {
+              if (expandedSort.key === 'amount') {
+                  return expandedSort.direction === 'asc' 
+                      ? (a.amount || 0) - (b.amount || 0)
+                      : (b.amount || 0) - (a.amount || 0);
+              }
+              return 0;
+          });
+      }
+
+      return processed;
+  };
+
+  const filteredExpandedPages = getProcessedExpandedPages();
   const totalExpandedPages = Math.ceil(filteredExpandedPages.length / expandedRowsPerPage);
   const paginatedExpandedPages = filteredExpandedPages.slice(
       (expandedPage - 1) * expandedRowsPerPage, 
@@ -570,47 +697,38 @@ const DonorSubmit: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {/* Row 4: Address */}
+                                {/* Row 4: Address with Searchable Dropdowns */}
                                 <div>
                                     <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-1"><MapPin size={12}/> Address Details</h4>
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
                                          <div>
-                                            <label className="block text-xs font-bold text-slate-600 mb-1">State <span className="text-red-500">*</span></label>
-                                            <select 
-                                                required
-                                                value={activePage.state || ''} 
-                                                onChange={e => handleLocationChange('state', e.target.value)} 
-                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
-                                            >
-                                                <option value="">Select State</option>
-                                                {getStates().map(s => <option key={s} value={s}>{s}</option>)}
-                                            </select>
+                                            <SearchableSelect
+                                                label="State"
+                                                value={activePage.state || ''}
+                                                options={getStates()}
+                                                onChange={(val) => handleLocationChange('state', val)}
+                                                placeholder="Select State"
+                                            />
                                          </div>
                                          <div>
-                                            <label className="block text-xs font-bold text-slate-600 mb-1">District <span className="text-red-500">*</span></label>
-                                            <select 
-                                                required
-                                                value={activePage.district || ''} 
-                                                onChange={e => handleLocationChange('district', e.target.value)} 
+                                            <SearchableSelect
+                                                label="District"
+                                                value={activePage.district || ''}
+                                                options={getDistricts()}
+                                                onChange={(val) => handleLocationChange('district', val)}
+                                                placeholder="Select District"
                                                 disabled={!activePage.state}
-                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white disabled:bg-slate-50"
-                                            >
-                                                <option value="">Select District</option>
-                                                {getDistricts().map(d => <option key={d} value={d}>{d}</option>)}
-                                            </select>
+                                            />
                                          </div>
                                          <div>
-                                            <label className="block text-xs font-bold text-slate-600 mb-1">Town <span className="text-red-500">*</span></label>
-                                            <select 
-                                                required
-                                                value={activePage.town || ''} 
-                                                onChange={e => handleLocationChange('town', e.target.value)} 
+                                            <SearchableSelect
+                                                label="Town / Mandal"
+                                                value={activePage.town || ''}
+                                                options={getTowns()}
+                                                onChange={(val) => handleLocationChange('town', val)}
+                                                placeholder="Select Town"
                                                 disabled={!activePage.district}
-                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white disabled:bg-slate-50"
-                                            >
-                                                <option value="">Select Town</option>
-                                                {getTowns().map(t => <option key={t} value={t}>{t}</option>)}
-                                            </select>
+                                            />
                                          </div>
                                          <div>
                                             <label className="block text-xs font-bold text-slate-600 mb-1">Pincode <span className="text-red-500">*</span></label>
@@ -652,121 +770,146 @@ const DonorSubmit: React.FC = () => {
       );
   }
 
-  // --- Improved Donor Details Modal ---
+  // --- Improved Donor Details Modal (Wide & Scrollable) ---
   if (viewDonorModal) {
       return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setViewDonorModal(null)}></div>
-              <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl relative z-10 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-                   <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 p-6 text-white flex justify-between items-start shrink-0">
-                       <div className="flex items-center gap-4">
-                           <div className="bg-white/20 p-2 rounded-lg">
-                               <User size={24} className="text-white"/>
-                           </div>
-                           <div>
-                               <h3 className="text-xl font-bold">Donor Information</h3>
-                               <p className="text-indigo-100 text-sm mt-0.5 opacity-90">Review submitted details</p>
-                           </div>
+              <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm transition-opacity" onClick={() => setViewDonorModal(null)}></div>
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] relative z-10 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+                   {/* Modal Header */}
+                   <div className="bg-indigo-600 px-6 py-4 flex justify-between items-center shrink-0">
+                       <div>
+                           <h3 className="text-xl font-bold text-white">Donor Details</h3>
+                           <p className="text-indigo-100 text-sm opacity-90 mt-0.5">Receipt #: <span className="font-mono font-bold">{viewDonorModal.receiptNumber || 'N/A'}</span></p>
                        </div>
-                       <button onClick={() => setViewDonorModal(null)} className="text-indigo-200 hover:text-white bg-white/10 hover:bg-white/20 p-1.5 rounded-full transition-colors">
+                       <button onClick={() => setViewDonorModal(null)} className="text-indigo-200 hover:text-white bg-indigo-700/50 hover:bg-indigo-700 p-1.5 rounded-full transition-colors">
                            <X size={20} />
                        </button>
                    </div>
                    
-                   <div className="p-6 overflow-y-auto custom-scrollbar space-y-6 max-h-[75vh]">
-                        {/* Summary Badge */}
-                        <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-200">
-                            <div>
-                                <p className="text-xs text-slate-500 font-bold uppercase mb-1">Receipt Number</p>
-                                <span className="font-mono font-bold text-lg text-slate-800 tracking-wide">{viewDonorModal.receiptNumber || 'N/A'}</span>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-xs text-slate-500 font-bold uppercase mb-1">Donation Amount</p>
-                                <span className="font-bold text-2xl text-emerald-600">₹{viewDonorModal.amount?.toLocaleString()}</span>
-                            </div>
-                        </div>
-
-                        {/* Personal & ID Details */}
-                        <div className="space-y-4">
-                            <h4 className="text-xs font-bold text-indigo-600 uppercase flex items-center gap-2 border-b border-indigo-100 pb-2">
-                                <FileBadge size={16}/> Identity & Contact
+                   <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+                        {/* Section 1: Personal Information */}
+                        <div>
+                            <h4 className="flex items-center gap-2 text-slate-500 font-bold text-xs uppercase mb-3 border-b border-slate-100 pb-2">
+                                <User size={16} className="text-slate-400"/> Personal Information
                             </h4>
                             <div className="grid grid-cols-2 gap-y-4 gap-x-6">
                                 <div>
-                                    <label className="text-xs text-slate-400 block mb-0.5">Full Name</label>
-                                    <p className="text-sm font-bold text-slate-900">{viewDonorModal.donorName}</p>
+                                    <p className="text-xs text-slate-400 font-medium uppercase mb-1">Name</p>
+                                    <p className="text-sm font-bold text-slate-800">{viewDonorModal.donorName}</p>
                                 </div>
                                 <div>
-                                    <label className="text-xs text-slate-400 block mb-0.5">Gender</label>
-                                    <p className="text-sm font-medium text-slate-800">{viewDonorModal.gender || '-'}</p>
+                                    <p className="text-xs text-slate-400 font-medium uppercase mb-1">Gender</p>
+                                    <p className="text-sm font-semibold text-slate-800">{viewDonorModal.gender || '-'}</p>
                                 </div>
                                 <div>
-                                    <label className="text-xs text-slate-400 block mb-0.5">ID Proof Type</label>
-                                    <p className="text-sm font-medium text-slate-800">{viewDonorModal.idProofType || 'N/A'}</p>
+                                    <p className="text-xs text-slate-400 font-medium uppercase mb-1">Phone</p>
+                                    <p className="text-sm font-semibold text-slate-800">{viewDonorModal.donorPhone}</p>
                                 </div>
                                 <div>
-                                    <label className="text-xs text-slate-400 block mb-0.5">ID Number</label>
-                                    <p className="text-sm font-medium text-slate-800 font-mono">{viewDonorModal.idProofNumber || 'N/A'}</p>
-                                </div>
-                                <div>
-                                    <label className="text-xs text-slate-400 block mb-0.5">Phone</label>
-                                    <p className="text-sm font-medium text-slate-800">{viewDonorModal.donorPhone}</p>
-                                </div>
-                                <div>
-                                    <label className="text-xs text-slate-400 block mb-0.5">Email</label>
-                                    <p className="text-sm font-medium text-slate-800 break-all">{viewDonorModal.email || '-'}</p>
+                                    <p className="text-xs text-slate-400 font-medium uppercase mb-1">Email</p>
+                                    <p className="text-sm font-semibold text-slate-800 break-words">{viewDonorModal.email || '-'}</p>
                                 </div>
                                 <div className="col-span-2">
-                                    <label className="text-xs text-slate-400 block mb-0.5">Profession</label>
-                                    <p className="text-sm font-medium text-slate-800">{viewDonorModal.profession || '-'}</p>
+                                    <p className="text-xs text-slate-400 font-medium uppercase mb-1">Profession</p>
+                                    <p className="text-sm font-semibold text-slate-800">{viewDonorModal.profession || '-'}</p>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Payment Details */}
-                        <div className="space-y-4">
-                            <h4 className="text-xs font-bold text-indigo-600 uppercase flex items-center gap-2 border-b border-indigo-100 pb-2">
-                                <CreditCard size={16}/> Payment Information
+                        {/* Section 2: ID Proof Details */}
+                        <div>
+                            <h4 className="flex items-center gap-2 text-slate-500 font-bold text-xs uppercase mb-3 border-b border-slate-100 pb-2">
+                                <FileText size={16} className="text-slate-400"/> ID Proof Details
                             </h4>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="text-xs text-slate-400 font-medium uppercase mb-1">ID Type</p>
+                                        <p className="text-sm font-bold text-slate-800">{viewDonorModal.idProofType || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-400 font-medium uppercase mb-1">ID Number</p>
+                                        <p className="text-sm font-bold text-slate-800 font-mono">{viewDonorModal.idProofNumber || 'N/A'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Section 3: Donation Details */}
+                        <div>
+                            <h4 className="flex items-center gap-2 text-slate-500 font-bold text-xs uppercase mb-3 border-b border-slate-100 pb-2">
+                                <IndianRupee size={16} className="text-slate-400"/> Donation Details
+                            </h4>
+                            <div className="bg-emerald-50 p-5 rounded-lg border border-emerald-100 flex flex-col md:flex-row md:justify-between gap-4">
                                 <div>
-                                    <label className="text-xs text-slate-400 block mb-0.5">Payment Mode</label>
-                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                                        viewDonorModal.paymentMode === 'Online' ? 'bg-blue-100 text-blue-700' : 
-                                        viewDonorModal.paymentMode === 'Check' ? 'bg-amber-100 text-amber-700' : 
-                                        'bg-slate-100 text-slate-700'
-                                    }`}>
+                                    <p className="text-xs text-emerald-600 font-bold uppercase mb-1">Amount Paid</p>
+                                    <p className="text-3xl font-bold text-emerald-700">₹{viewDonorModal.amount?.toLocaleString()}</p>
+                                </div>
+                                <div className="md:text-right">
+                                    <p className="text-xs text-emerald-600 font-bold uppercase mb-1">Payment Mode</p>
+                                    <span className="inline-flex items-center bg-white text-emerald-700 text-sm font-bold px-3 py-1 rounded-md shadow-sm border border-emerald-100">
+                                        {viewDonorModal.paymentMode === 'Online' && <CreditCard size={14} className="mr-1.5"/>}
+                                        {viewDonorModal.paymentMode === 'Offline' && <Banknote size={14} className="mr-1.5"/>}
+                                        {viewDonorModal.paymentMode === 'Check' && <FileText size={14} className="mr-1.5"/>}
                                         {viewDonorModal.paymentMode}
                                     </span>
                                 </div>
-                                {viewDonorModal.paymentMode === 'Online' && (
-                                    <div>
-                                        <label className="text-xs text-slate-400 block mb-0.5">Transaction ID</label>
-                                        <p className="text-sm font-mono font-medium text-slate-800 bg-slate-50 p-1 px-2 rounded border border-slate-200 inline-block">{viewDonorModal.transactionId}</p>
-                                    </div>
-                                )}
-                                {viewDonorModal.paymentMode === 'Check' && (
-                                    <div>
-                                        <label className="text-xs text-slate-400 block mb-0.5">Check Number</label>
-                                        <p className="text-sm font-mono font-medium text-slate-800 bg-slate-50 p-1 px-2 rounded border border-slate-200 inline-block">{viewDonorModal.checkNumber}</p>
-                                    </div>
-                                )}
                             </div>
+                            
+                            {/* Detailed Payment Info */}
+                            {(viewDonorModal.paymentMode === 'Online' || viewDonorModal.paymentMode === 'Check') && (
+                                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {viewDonorModal.paymentMode === 'Online' && (
+                                        <div className="bg-slate-50 p-3 rounded border border-slate-200">
+                                            <p className="text-xs text-slate-500 uppercase font-bold">Transaction ID</p>
+                                            <p className="text-sm font-mono font-medium text-slate-800 mt-1">{viewDonorModal.transactionId || 'N/A'}</p>
+                                        </div>
+                                    )}
+                                    {viewDonorModal.paymentMode === 'Check' && (
+                                        <div className="bg-slate-50 p-3 rounded border border-slate-200">
+                                            <p className="text-xs text-slate-500 uppercase font-bold">Check Number</p>
+                                            <p className="text-sm font-mono font-medium text-slate-800 mt-1">{viewDonorModal.checkNumber || 'N/A'}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
-                        {/* Address */}
-                        <div className="space-y-4">
-                             <h4 className="text-xs font-bold text-indigo-600 uppercase flex items-center gap-2 border-b border-indigo-100 pb-2">
-                                <MapPin size={16}/> Residential Address
+                        {/* Section 4: Address Information */}
+                        <div>
+                             <h4 className="flex items-center gap-2 text-slate-500 font-bold text-xs uppercase mb-3 border-b border-slate-100 pb-2">
+                                <MapPin size={16} className="text-slate-400"/> Address Information
                             </h4>
-                             <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">
-                                {viewDonorModal.town}, {viewDonorModal.district}, {viewDonorModal.state}
-                                {viewDonorModal.pincode && <span className="font-bold text-slate-900 block mt-1">PIN: {viewDonorModal.pincode}</span>}
-                             </p>
+                             <div className="grid grid-cols-2 gap-y-4 gap-x-6">
+                                <div>
+                                    <p className="text-xs text-slate-400 font-medium uppercase mb-1">Town / Mandal</p>
+                                    <p className="text-sm font-semibold text-slate-800">{viewDonorModal.town}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-400 font-medium uppercase mb-1">District</p>
+                                    <p className="text-sm font-semibold text-slate-800">{viewDonorModal.district}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-400 font-medium uppercase mb-1">State</p>
+                                    <p className="text-sm font-semibold text-slate-800">{viewDonorModal.state}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-400 font-medium uppercase mb-1">Pincode</p>
+                                    <p className="text-sm font-semibold text-slate-800 font-mono">{viewDonorModal.pincode || '-'}</p>
+                                </div>
+                             </div>
                         </div>
                    </div>
-                   <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-end">
-                      <button onClick={() => setViewDonorModal(null)} className="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 shadow-sm transition-colors">Close Details</button>
+                   
+                   {/* Footer */}
+                   <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end shrink-0">
+                      <button 
+                        onClick={() => setViewDonorModal(null)} 
+                        className="px-6 py-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-800 transition-colors shadow-sm"
+                      >
+                        Close
+                      </button>
                    </div>
               </div>
           </div>
@@ -978,7 +1121,15 @@ const DonorSubmit: React.FC = () => {
                                                                         <div className="col-span-3">Donor Name</div>
                                                                         <div className="col-span-3">Contact</div>
                                                                         <div className="col-span-3">Profession</div>
-                                                                        <div className="col-span-2 text-right">Amount</div>
+                                                                        <div 
+                                                                            className="col-span-2 text-right cursor-pointer flex items-center justify-end hover:text-indigo-600 transition-colors"
+                                                                            onClick={() => handleExpandedSort('amount')}
+                                                                        >
+                                                                            Amount 
+                                                                            {expandedSort?.key === 'amount' ? (
+                                                                                expandedSort.direction === 'asc' ? <ArrowUp size={12} className="ml-1"/> : <ArrowDown size={12} className="ml-1"/>
+                                                                            ) : <ArrowUpDown size={12} className="ml-1 opacity-50"/>}
+                                                                        </div>
                                                                         <div className="col-span-1 text-center">Action</div>
                                                                     </div>
 
@@ -992,7 +1143,7 @@ const DonorSubmit: React.FC = () => {
                                                                                 {/* Col 1: Name */}
                                                                                 <div className="col-span-3">
                                                                                     <p className="font-bold text-slate-800">{page.donorName}</p>
-                                                                                    <p className="text-xs text-slate-500 mt-0.5">Recpt: <span className="font-mono">{page.receiptNumber || 'N/A'}</span></p>
+                                                                                    <p className="text-xs text-slate-500 mt-0.5">Recpt: <span className="font-mono">{page.receiptNumber || 'N/A'}</p>
                                                                                 </div>
 
                                                                                 {/* Col 2: Contact */}
